@@ -800,7 +800,7 @@ namespace ts {
             return callCache.get(node);
         }
         function shouldMakeLazy(signatureParam: Symbol, callArg: Type) {
-            const type = getTypeOfParameter(signatureParam);
+            const type = getTypeOfParameterOriginal(signatureParam);
             if (type.flags & TypeFlags.Union) {
                 const types = (type as UnionType).types;
                 const lazyArg = types.find((type) => {
@@ -31835,8 +31835,8 @@ namespace ts {
             Debug.assert(!!(file.flags & NodeFlags.PossiblyContainsImportMeta), "Containing file is missing import meta node flag.");
             return node.name.escapedText === "meta" ? getGlobalImportMetaType() : errorType;
         }
-
-        function getTypeOfParameter(symbol: Symbol) {
+        // TSPLUS EXTENSION BEGIN
+        function getTypeOfParameterOriginal(symbol: Symbol) {
             const type = getTypeOfSymbol(symbol);
             if (strictNullChecks) {
                 const declaration = symbol.valueDeclaration;
@@ -31846,6 +31846,39 @@ namespace ts {
             }
             return type;
         }
+
+        function shouldMakeLazyInternal(type: Type) {
+            if (type.flags & TypeFlags.Union) {
+                const types = (type as UnionType).types;
+                const lazyArg = types.find((type) => {
+                    if (type.symbol) {
+                        const tag = type.symbol.declarations?.flatMap(collectEtsTypeTags)[0];
+                        if (tag?.comment === "type ets/LazyArgument") {
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+                if (lazyArg) {
+                    return !isTypeAssignableTo(type, lazyArg);
+                }
+            }
+        }
+
+        function getTypeOfParameter(symbol: Symbol) {
+            let type = getTypeOfSymbol(symbol);
+            if(shouldMakeLazyInternal(type)) {
+                type = getUnionType([type, (type as UnionType).types[0]])
+            }
+            if (strictNullChecks) {
+                const declaration = symbol.valueDeclaration;
+                if (declaration && hasInitializer(declaration)) {
+                    return getOptionalType(type);
+                }
+            }
+            return type;
+        }
+        // TSPLUS EXTENSION END
 
         function getTupleElementLabel(d: ParameterDeclaration | NamedTupleMember) {
             Debug.assert(isIdentifier(d.name)); // Parameter declarations could be binding patterns, but we only allow identifier names

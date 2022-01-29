@@ -4,6 +4,8 @@
         "target": "ES2021",
         "moduleResolution": "Node",
         "strict": true,
+        "strictFunctionTypes": true,
+        "strictNullChecks": true,
         "outDir": "build/esm",
         "declaration": true,
         "declarationDir": "build/dts",

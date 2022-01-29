@@ -3,7 +3,8 @@ import * as T from "@effect-ts/core/Effect";
 /**
  * @ets type ets/Effect
  */
-export interface Effect<R, E, A> extends T.Effect<R, E, A> { }
+export interface Effect<R, E, A> extends T.Effect<R, E, A> {  }
+
 /**
  * @ets type ets/EffectOps
  */

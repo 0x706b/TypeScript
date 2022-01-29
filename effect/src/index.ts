@@ -1,5 +1,6 @@
 import { Effect } from "./prelude.js";
 import { Maybe } from "./prelude.js";
+import { LazyArgument } from "./utils/LazyArgument.js";
 
 export const isPositive = (n: number) =>
   n > 0 ? Maybe.just("positive") : Maybe.nothing();
@@ -30,3 +31,15 @@ const y = x.isJust() ? x.value : undefined;
 x.assertJust();
 
 const z = x.value;
+
+export interface LazyArgTest {
+  readonly test: <R, E, A>(_: LazyArgument<Effect<R, E, A>>, __etsTrace?: string) => Effect<R, E, A>
+}
+
+export class LazyArgTestImpl implements LazyArgTest {
+  constructor(readonly flag: boolean) {}
+
+  test = <R, E, A>(_: LazyArgument<Effect<R, E, A>>, __etsTrace?: string): Effect<R, E, A> => {
+    return Effect.suspendSucceed(_)
+  }
+}
