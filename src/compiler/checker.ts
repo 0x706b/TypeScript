@@ -800,7 +800,7 @@ namespace ts {
             return callCache.get(node);
         }
         function shouldMakeLazy(signatureParam: Symbol, callArg: Type) {
-            const type = getTypeOfParameter(signatureParam);
+            const type = getTypeOfParameterOriginal(signatureParam);
             if (type.flags & TypeFlags.Union) {
                 const types = (type as UnionType).types;
                 const lazyArg = types.find((type) => {
@@ -31836,8 +31836,36 @@ namespace ts {
             return node.name.escapedText === "meta" ? getGlobalImportMetaType() : errorType;
         }
 
-        function getTypeOfParameter(symbol: Symbol) {
+        // TSPLUS EXTENSION BEGIN
+        function getTypeOfParameterOriginal(symbol: Symbol) {
             const type = getTypeOfSymbol(symbol);
+            if (strictNullChecks) {
+                const declaration = symbol.valueDeclaration;
+                if (declaration && hasInitializer(declaration)) {
+                    return getOptionalType(type);
+                }
+            }
+            return type;
+        }
+
+        function isLazyParameter(type: Type) {
+            if (type.symbol) {
+                const tag = type.symbol.declarations?.flatMap(collectEtsTypeTags)[0];
+                if (tag?.comment === "type ets/LazyArgument") {
+                    return true;
+                }
+            }
+            return false;
+        }
+        // TSPLUS EXTENSION END
+
+        function getTypeOfParameter(symbol: Symbol) {
+            let type = getTypeOfSymbol(symbol);
+            // TSPLUS EXTENSION BEGIN
+            if(isLazyParameter(type)) {
+                type = getUnionType([type, (type as TypeReference).resolvedTypeArguments![0]])
+            }
+            // TSPLUS EXTENSION END
             if (strictNullChecks) {
                 const declaration = symbol.valueDeclaration;
                 if (declaration && hasInitializer(declaration)) {
