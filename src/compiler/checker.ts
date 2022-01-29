@@ -31848,27 +31848,19 @@ namespace ts {
         }
 
         function shouldMakeLazyInternal(type: Type) {
-            if (type.flags & TypeFlags.Union) {
-                const types = (type as UnionType).types;
-                const lazyArg = types.find((type) => {
-                    if (type.symbol) {
-                        const tag = type.symbol.declarations?.flatMap(collectEtsTypeTags)[0];
-                        if (tag?.comment === "type ets/LazyArgument") {
-                            return true;
-                        }
-                    }
-                    return false;
-                });
-                if (lazyArg) {
-                    return !isTypeAssignableTo(type, lazyArg);
+            if (type.symbol) {
+                const tag = type.symbol.declarations?.flatMap(collectEtsTypeTags)[0];
+                if (tag?.comment === "type ets/LazyArgument") {
+                    return true;
                 }
             }
+            return false;
         }
 
         function getTypeOfParameter(symbol: Symbol) {
             let type = getTypeOfSymbol(symbol);
             if(shouldMakeLazyInternal(type)) {
-                type = getUnionType([type, (type as UnionType).types[0]])
+                type = getUnionType([type, (type as TypeReference).resolvedTypeArguments![0]])
             }
             if (strictNullChecks) {
                 const declaration = symbol.valueDeclaration;

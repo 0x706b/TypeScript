@@ -1170,6 +1170,8 @@
   "Remove_parentheses_95126": "Usuń nawiasy",
   "Remove_template_tag_90011": "Usuń znacznik szablonu",
   "Remove_the_20mb_cap_on_total_source_code_size_for_JavaScript_files_in_the_TypeScript_language_server_6618": "Usuń ograniczenie 20 MB dotyczące łącznego rozmiaru kodu źródłowego dla plików JavaScript na serwerze języka TypeScript.",
+  "Remove_type_from_import_declaration_from_0_90055": "Usuń element „type” z deklaracji importu z elementu „ {0}”",
+  "Remove_type_from_import_of_0_from_1_90056": "Usuń element „type” z importu elementu „{0}” z „{1}”",
   "Remove_type_parameters_90012": "Usuń parametry typu",
   "Remove_unnecessary_await_95086": "Usuń niepotrzebny operator „await”",
   "Remove_unreachable_code_95050": "Usuń nieosiągalny kod",

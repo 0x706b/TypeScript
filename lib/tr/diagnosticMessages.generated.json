@@ -1170,6 +1170,8 @@
   "Remove_parentheses_95126": "Parantezleri kaldır",
   "Remove_template_tag_90011": "Şablon etiketini kaldırın",
   "Remove_the_20mb_cap_on_total_source_code_size_for_JavaScript_files_in_the_TypeScript_language_server_6618": "TypeScript dil sunucusundaki JavaScript dosyaları için toplam kaynak kodu boyutuna yönelik 20 MB sınırını kaldırın.",
+  "Remove_type_from_import_declaration_from_0_90055": "\"{0}\" içindeki içeri aktarma bildiriminden “type”ı kaldırın",
+  "Remove_type_from_import_of_0_from_1_90056": "\"{1}\" içindeki “{0}” içe aktarımından “type”ı kaldırın",
   "Remove_type_parameters_90012": "Tür parametrelerini kaldırın",
   "Remove_unnecessary_await_95086": "Gereksiz 'await' öğesini kaldırın",
   "Remove_unreachable_code_95050": "Erişilemeyen kodları kaldır",
