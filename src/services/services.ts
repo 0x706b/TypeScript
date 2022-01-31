@@ -1885,7 +1885,7 @@ namespace ts {
                 }
                 if(isPropertyAccessExpression(node.parent)) {
                     const parentType = typeChecker.getTypeAtLocation(node.parent.expression);
-                    const extensions = typeChecker.getExtensions(parentType);
+                    const extensions = typeChecker.getExtensions(parentType, node.parent as Expression);
                     if(extensions) {
                         const type = typeChecker.getTypeAtLocation(node);
                         const name = node.parent.name.escapedText as string;
