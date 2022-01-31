@@ -187,13 +187,18 @@ namespace ts {
                         const fluentExtension = checker.getFluentExtension(innerExpressionType, (node.expression as PropertyAccessExpression).name.escapedText.toString());
 
                         if (fluentExtension) {
-                            const visited = visitCallExpression(source, traceInScope, node as CallExpression, visitor, context) as CallExpression;
-                            return factory.updateCallExpression(
-                                visited as CallExpression,
-                                getPathOfExtension(context.factory, importer, fluentExtension, source),
-                                (visited as CallExpression).typeArguments,
-                                [((visited as CallExpression).expression as PropertyAccessExpression).expression, ...(visited as CallExpression).arguments]
-                            );
+                            const signature = checker.resolveCall(node, fluentExtension.signatures, undefined, CheckMode.Normal, SignatureFlags.None, undefined);
+                            if (signature && signature.target && isTsPlusSignature(signature.target)) {
+                                const visited = visitCallExpression(source, traceInScope, node as CallExpression, visitor, context) as CallExpression;
+                                return factory.updateCallExpression(
+                                    visited as CallExpression,
+                                    getPathOfExtension(context.factory, importer, { definition: signature.target.tsPlusFile, exportName: signature.target.tsPlusExportName }, source),
+                                    (visited as CallExpression).typeArguments,
+                                    [((visited as CallExpression).expression as PropertyAccessExpression).expression, ...(visited as CallExpression).arguments]
+                                );
+                            } else {
+                                throw new Error("BUG: No applicable signature found for fluent extension");
+                            }
                         }
                     }
                 }

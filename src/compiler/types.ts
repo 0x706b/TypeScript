@@ -3312,8 +3312,8 @@ namespace ts {
     export interface TsPlusFluentSymbol extends TransientSymbol {
         tsPlusTag: TsPlusSymbolTag.Fluent
         tsPlusDeclaration: FunctionDeclaration;
-        tsPlusResolvedSignatures: Signature[];
         tsPlusName: string;
+        tsPlusResolvedSignatures: TsPlusSignature[];
     }
 
     export type SignatureWithParameters = Omit<Signature, "parameters"> & { parameters: ReadonlyArray<Symbol & { valueDeclaration: ParameterDeclaration }> }
@@ -3356,6 +3356,12 @@ namespace ts {
 
     export interface TsPlusType extends Type {
         tsPlusSymbol: TsPlusSymbol;
+    }
+
+    export interface TsPlusSignature extends Signature {
+        tsPlusTag: "TsPlusSignature";
+        tsPlusFile: SourceFile;
+        tsPlusExportName: string;
     }
 
     export interface JSDocLink extends Node {
@@ -4524,7 +4530,7 @@ namespace ts {
         getGlobalImport(file: SourceFile): string
         getLocalImport(from: SourceFile, file: SourceFile): string
         getExtensions(selfNode: Expression): ESMap<string, Symbol>
-        getFluentExtension(target: Type, name: string): { patched: Symbol, definition: SourceFile, exportName: string } | undefined
+        getFluentExtension(target: Type, name: string): { combined: Symbol, signatures: readonly TsPlusSignature[], members: Set<{ patched: Symbol, definition: SourceFile, exportName: string }> } | undefined
         getGetterExtension(target: Type, name: string): { definition: SourceFile, exportName: string } | undefined
         getStaticExtension(target: Type, name: string): { patched: Symbol, definition: SourceFile, exportName: string } | undefined
         getOperatorExtension(target: Type, name: string): { patched: Symbol, definition: SourceFile, exportName: string } | undefined
@@ -4535,6 +4541,7 @@ namespace ts {
         cloneSymbol(symbol: Symbol): Symbol
         getTextOfBinaryOp(kind: SyntaxKind): string | undefined
         getInstantiatedTsPlusSignature(declaration: Declaration, args: Expression[], checkMode: CheckMode | undefined): Signature
+        resolveCall(node: CallLikeExpression, signatures: readonly Signature[], candidatesOutArray: Signature[] | undefined, checkMode: CheckMode, callChainFlags: SignatureFlags, fallbackError?: DiagnosticMessage): Signature
     }
 
     /* @internal */

@@ -351,7 +351,8 @@ namespace ts {
         // TSPLUS EXTENSION START
         const importAsCache = new Map<string, string>();
         const typeSymbolCache = new Map<Symbol, string[]>();
-        const fluentCache = new Map<string, ESMap<string, { patched: Symbol, definition: SourceFile, exportName: string }>>();
+        const fluentCache = new Map<string, ESMap<string, { combined: Symbol, signatures: readonly TsPlusSignature[], members: Set<{ patched: Symbol, definition: SourceFile, exportName: string }> }>>();
+        const fluentTempCache = new Map<string, ESMap<string, Set<{ patched: Symbol, definition: SourceFile, exportName: string }>>>();
         const getterCache = new Map<string, ESMap<string, { patched: (node: Expression) => Symbol | undefined, definition: SourceFile, exportName: string }>>();
         const operatorCache = new Map<string, ESMap<string, { patched: Symbol, definition: SourceFile, exportName: string }>>();
         const staticCache = new Map<string, ESMap<string, { patched: Symbol, definition: SourceFile, exportName: string }>>();
@@ -788,7 +789,8 @@ namespace ts {
             isTailRec,
             cloneSymbol,
             getTextOfBinaryOp,
-            getInstantiatedTsPlusSignature
+            getInstantiatedTsPlusSignature,
+            resolveCall
             // TSPLUS EXTENSION END
         };
 
@@ -846,7 +848,7 @@ namespace ts {
                         const _fluent = fluentCache.get(typeSymbol);
                         if (_fluent) {
                             _fluent.forEach((v, k) => {
-                                copy.set(k, v.patched);
+                                copy.set(k, v.combined);
                             });
                         }
                         const _getter = getterCache.get(typeSymbol);
@@ -23844,7 +23846,7 @@ namespace ts {
                             if (symbol && typeSymbolCache.has(symbol)) {
                                 const fluentExtenion = getFluentExtension(type, name.escapedText as string);
                                 if (fluentExtenion) {
-                                    return getTypeOfSymbol(fluentExtenion.patched);
+                                    return getTypeOfSymbol(fluentExtenion.combined);
                                 }
                             }
                             // TSPLUS EXTENSION END
@@ -28771,7 +28773,7 @@ namespace ts {
             if (!inType) {
                 const fluentExt = getFluentExtension(leftType, right.escapedText.toString())
                 if (fluentExt && isCallExpression(node.parent)) {
-                    return getTypeOfSymbol(fluentExt.patched)
+                    return getTypeOfSymbol(fluentExt.combined)
                 }
                 const getterExt = getGetterExtension(leftType, right.escapedText.toString())
                 if (getterExt && isExpression(_left)) {
@@ -43014,8 +43016,8 @@ namespace ts {
                 (tag): tag is TsPlusJSDocOperatorTag => tag.tagName.escapedText === "tsplus" && typeof tag.comment === "string" && tag.comment.startsWith("getter")
             );
         }
-        function thisifyTsPlusSignature(call: Signature) {
-            const signature = cloneSignature(call);
+        function thisifyTsPlusSignature(call: Signature, exportName: string, file: SourceFile) {
+            const signature = cloneSignature(call) as TsPlusSignature;
             const target = signature.parameters[0];
             signature.thisParameter = createSymbolWithType(createSymbol(target.flags, "this" as __String), getTypeOfSymbol(target));
             const typePredicate = getTypePredicateOfSignature(call);
@@ -43030,9 +43032,12 @@ namespace ts {
             signature.parameters = signature.parameters.slice(1, signature.parameters.length);
             signature.minArgumentCount = signature.minArgumentCount - 1;
             signature.instantiations = call.instantiations;
+            signature.tsPlusTag = "TsPlusSignature"
+            signature.tsPlusFile = file
+            signature.tsPlusExportName = exportName
             return signature;
         }
-        function createTsPlusFluentFunctionSymbol(name: string, dataFirst: FunctionDeclaration, signatures: Signature[]): TsPlusFluentSymbol {
+        function createTsPlusFluentFunctionSymbol(name: string, dataFirst: FunctionDeclaration, signatures: TsPlusSignature[]): TsPlusFluentSymbol {
             const symbol = createSymbol(SymbolFlags.Function, name as __String) as TsPlusFluentSymbol;
             symbol.tsPlusTag = TsPlusSymbolTag.Fluent;
             symbol.tsPlusDeclaration = dataFirst;
@@ -43092,19 +43097,19 @@ namespace ts {
             symbol.tsPlusName = name;
             return symbol;
         }
-        function getTsPlusFluentSymbolForFunctionDeclaration(name: string, dataFirst: FunctionDeclaration) {
+        function getTsPlusFluentSymbolForFunctionDeclaration(file: SourceFile, exportName: string, name: string, dataFirst: FunctionDeclaration) {
             const type = getTypeOfNode(dataFirst);
             const signatures = getSignaturesOfType(type, SignatureKind.Call);
-            const methods = signatures.map(thisifyTsPlusSignature);
+            const methods = signatures.map((signature) => thisifyTsPlusSignature(signature, exportName, file));
             const symbol = createTsPlusFluentFunctionSymbol(name, dataFirst, methods);
             const final = createAnonymousType(symbol, emptySymbols, methods, [], []);
             return createSymbolWithType(symbol, final);
         }
-        function getTsPlusFluentSymbolForVariableDeclaration(name: string, declaration: VariableDeclaration & { name: Identifier }) {
+        function getTsPlusFluentSymbolForVariableDeclaration(file: SourceFile, exportName: string, name: string, declaration: VariableDeclaration & { name: Identifier }) {
             const type = getTypeOfNode(declaration);
             const signatures = getSignaturesOfType(type, SignatureKind.Call);
             if(signatures.every((sigSymbol) => sigSymbol.parameters.every((paramSymbol) => paramSymbol.valueDeclaration && isVariableLike(paramSymbol.valueDeclaration) && isParameterDeclaration(paramSymbol.valueDeclaration)))) {
-                const methods = signatures.map(thisifyTsPlusSignature);
+                const methods = signatures.map((signature) => thisifyTsPlusSignature(signature, exportName, file));
                 const symbol = createTsPlusFluentVariableSymbol(name, declaration, methods);
                 const final = createAnonymousType(symbol, emptySymbols, methods, [], []);
                 return createSymbolWithType(symbol, final);
@@ -43207,16 +43212,22 @@ namespace ts {
                     const fluentTags = collectTsPlusFluentTags(declaration);
                     for (const fluentTag of fluentTags) {
                         const [, target, name] = fluentTag.comment.split(" ");
-                        if (!fluentCache.has(target)) {
-                            fluentCache.set(target, new Map());
+                        if (!fluentTempCache.has(target)) {
+                            fluentTempCache.set(target, new Map());
                         }
                         const patched = getTsPlusFluentSymbolForVariableDeclaration(
+                            file,
+                            declaration.name.escapedText.toString(),
                             name,
                             (declaration as VariableDeclaration & { name: Identifier })
                         )
                         if(patched) {
-                            const map = fluentCache.get(target)!;
-                            map.set(name, {
+                            const map = fluentTempCache.get(target)!;
+                            if (!map.has(name)) {
+                                map.set(name, new Set());
+                            }
+                            const set = map.get(name)!
+                            set.add({
                                 patched,
                                 exportName: declaration.name.escapedText.toString(),
                                 definition: file
@@ -43277,12 +43288,16 @@ namespace ts {
                 const fluentTags = collectTsPlusFluentTags(declaration);
                 for (const fluentTag of fluentTags) {
                     const [, target, name] = fluentTag.comment.split(" ");
-                    if (!fluentCache.has(target)) {
-                        fluentCache.set(target, new Map());
+                    if (!fluentTempCache.has(target)) {
+                        fluentTempCache.set(target, new Map());
                     }
-                    const map = fluentCache.get(target)!;
-                    map.set(name, {
-                        patched: getTsPlusFluentSymbolForFunctionDeclaration(name, declaration),
+                    const map = fluentTempCache.get(target)!;
+                    if (!map.has(name)) {
+                        map.set(name, new Set());
+                    }
+                    const set = map.get(name)!
+                    set.add({
+                        patched: getTsPlusFluentSymbolForFunctionDeclaration(file, declaration.name.escapedText.toString(), name, declaration),
                         exportName: declaration.name.escapedText.toString(),
                         definition: file
                     });
@@ -43358,15 +43373,33 @@ namespace ts {
         }
         function initTsPlusTypeChecker() {
             fluentCache.clear();
+            fluentTempCache.clear();
             operatorCache.clear();
             typeSymbolCache.clear();
             staticCache.clear();
             identityCache.clear();
             getterCache.clear();
             callCache.clear();
+
             for (const file of host.getSourceFiles()) {
                 collectTsPlusSymbols(file, file.statements);
             }
+
+            fluentTempCache.forEach((map, typeName) => {
+                if (!fluentCache.has(typeName)) {
+                    fluentCache.set(typeName, new Map());
+                }
+                const cache = fluentCache.get(typeName)!;
+                map.forEach((overloads, funcName) => {
+                    const signatures: TsPlusSignature[] = []
+                    overloads.forEach(({ patched }) => {
+                        signatures.push(...((patched as TransientSymbol).target as TsPlusFluentSymbol).tsPlusResolvedSignatures);
+                    })
+                    const symbol = createSymbol(SymbolFlags.Function, funcName as __String);
+                    const type = createAnonymousType(symbol, emptySymbols, signatures, [], []);
+                    cache.set(funcName, { combined: createSymbolWithType(symbol, type), signatures, members: overloads })
+                })
+            })
         }
         // TSPLUS EXTENSION END
 
@@ -45334,6 +45367,9 @@ namespace ts {
     // TSPLUS EXTENSION BEGIN
     export function isTsPlusSymbol(symbol: Symbol): symbol is TsPlusSymbol {
         return 'tsPlusTag' in symbol;
+    }
+    export function isTsPlusSignature(signature: Signature): signature is TsPlusSignature {
+        return 'tsPlusTag' in signature;
     }
     export function getNameForType(type: Type | undefined): string | undefined {
         if(!type) {
