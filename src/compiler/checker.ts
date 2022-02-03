@@ -789,8 +789,7 @@ namespace ts {
             isTailRec,
             cloneSymbol,
             getTextOfBinaryOp,
-            getInstantiatedTsPlusSignature,
-            resolveCall
+            getInstantiatedTsPlusSignature
             // TSPLUS EXTENSION END
         };
 
