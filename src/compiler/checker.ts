@@ -351,12 +351,15 @@ namespace ts {
         // TSPLUS EXTENSION START
         const importAsCache = new Map<string, string>();
         const typeSymbolCache = new Map<Symbol, string[]>();
-        const fluentCache = new Map<string, ESMap<string, { patched: Symbol, definition: SourceFile, exportName: string }>>();
+        const fluentCache = new Map<string, ESMap<string, TsPlusFluentExtension>>();
+        const fluentTempCache = new Map<string, ESMap<string, Set<{ signatures: readonly TsPlusSignature[], definition: SourceFile, exportName: string }>>>();
         const getterCache = new Map<string, ESMap<string, { patched: (node: Expression) => Symbol | undefined, definition: SourceFile, exportName: string }>>();
         const operatorCache = new Map<string, ESMap<string, { patched: Symbol, definition: SourceFile, exportName: string }>>();
-        const staticCache = new Map<string, ESMap<string, { patched: Symbol, definition: SourceFile, exportName: string }>>();
+        const staticFunctionCache = new Map<string, ESMap<string, TsPlusStaticFunctionExtension>>()
+        const staticVariableCache = new Map<string, ESMap<string, TsPlusStaticVariableExtension>>();
+        const staticFunctionTempCache = new Map<string, ESMap<string, Set<{ signatures: readonly TsPlusSignature[], definition: SourceFile, exportName: string }>>>();
         const identityCache = new Map<string, FunctionDeclaration>();
-        const callCache = new Map<Node, { patched: Symbol, definition: SourceFile, exportName: string }>();
+        const callCache = new Map<Node, TsPlusStaticFunctionExtension>();
         const indexCache = new Map<string, { declaration: FunctionDeclaration, definition: SourceFile, exportName: string }>();
         const indexAccessExpressionCache = new Map<Node, { declaration: FunctionDeclaration, definition: SourceFile, exportName: string }>();
         // TSPLUS EXTENSION END
@@ -783,7 +786,8 @@ namespace ts {
             getGetterExtension,
             getFluentExtension,
             getOperatorExtension,
-            getStaticExtension,
+            getStaticFunctionExtension,
+            getStaticVariableExtension,
             getCallExtension,
             shouldMakeLazy,
             isPipeCall,
@@ -840,11 +844,17 @@ namespace ts {
             symbols.forEach((target) => {
                 if (typeSymbolCache.has(target)) {
                     typeSymbolCache.get(target)!.forEach((typeSymbol) => {
-                        const _static = staticCache.get(typeSymbol);
-                        if (_static) {
-                            _static.forEach((v, k) => {
-                                copy.set(k, v.patched);
+                        const _staticFunctions = staticFunctionCache.get(typeSymbol);
+                        if (_staticFunctions) {
+                            _staticFunctions.forEach((v, k) => {
+                                copy.set(k, v.patched)
                             });
+                        }
+                        const _staticVariables = staticVariableCache.get(typeSymbol);
+                        if(_staticVariables) {
+                            _staticVariables.forEach((v, k) => {
+                                copy.set(k, v.patched);
+                            })
                         }
                         const _fluent = fluentCache.get(typeSymbol);
                         if (_fluent) {
@@ -905,14 +915,14 @@ namespace ts {
                 }
             }
         }
-        function getStaticExtension(targetType: Type, name: string) {
+        function getStaticFunctionExtension(targetType: Type, name: string) {
             const symbols = collectRelevantSymbols(targetType)
             for (const target of symbols) {
                 if (typeSymbolCache.has(target)) {
                     const x = typeSymbolCache.get(target)!.flatMap(
                         (tag) => {
-                            if (staticCache.has(tag)) {
-                                const cache = staticCache.get(tag)
+                            if (staticFunctionCache.has(tag)) {
+                                const cache = staticFunctionCache.get(tag)
                                 if (cache?.has(name)) {
                                     return [cache.get(name)!]
                                 }
@@ -920,6 +930,22 @@ namespace ts {
                             return []
                         }
                     )
+                    return x.length > 0 ? x[x.length - 1] : undefined;
+                }
+            }
+        }
+        function getStaticVariableExtension(targetType: Type, name: string) {
+            const symbols = collectRelevantSymbols(targetType);
+            for (const target of symbols) {
+                if (typeSymbolCache.has(target)) {
+                    const x = flatMap(typeSymbolCache.get(target)!, (tag) => {
+                        if (staticVariableCache.has(tag)) {
+                            const cache = staticVariableCache.get(tag)
+                            if (cache?.has(name)) {
+                                return [cache.get(name)!]
+                            }
+                        }
+                    });
                     return x.length > 0 ? x[x.length - 1] : undefined;
                 }
             }
@@ -25480,7 +25506,7 @@ namespace ts {
             // for the symbol. Also, don't mark any property access expression LHS - checkPropertyAccessExpression will handle that
             if (!(node.parent && isPropertyAccessExpression(node.parent) && node.parent.expression === node)) {
                 // We should also not mark as used identifiers that will be replaced
-                if (!(node.parent && isCallExpression(node.parent) && node.parent.expression === node && getSignaturesOfType(type, SignatureKind.Call).length === 0 && getStaticExtension(type, "__call") != null)) {
+                if (!(node.parent && isCallExpression(node.parent) && node.parent.expression === node && getSignaturesOfType(type, SignatureKind.Call).length === 0 && getStaticFunctionExtension(type, "__call") != null)) {
                     markAliasReferenced(getResolvedSymbol(node), node);
                 }
             }
@@ -28794,9 +28820,16 @@ namespace ts {
                         return type;
                     }
                 }
-                const staticExt = getStaticExtension(leftType, right.escapedText.toString())
-                if (staticExt) {
-                    return getTypeOfSymbol(staticExt.patched)
+                const staticFuncExt = getStaticFunctionExtension(leftType, right.escapedText.toString());
+                if (staticFuncExt) {
+                    return getTypeOfSymbol(staticFuncExt.patched);
+                }
+                const staticVarExt = getStaticVariableExtension(leftType, right.escapedText.toString());
+                if (staticVarExt) {
+                    const type = getTypeOfSymbol(staticVarExt.patched);
+                    // @ts-expect-error
+                    type.tsPlusSymbol = staticVarExt.patched;
+                    return type;
                 }
             }
         }
@@ -30911,7 +30944,7 @@ namespace ts {
 
             // TSPLUS EXTENSION START
             if (callSignatures.length === 0) {
-                const callExtension = getStaticExtension(apparentType, "__call");
+                const callExtension = getStaticFunctionExtension(apparentType, "__call");
                 
                 if (callExtension) {
                     callSignatures = Array.from(getSignaturesOfType(getTypeOfSymbol(callExtension.patched), SignatureKind.Call));
@@ -43066,8 +43099,15 @@ namespace ts {
                 (tag): tag is TsPlusJSDocOperatorTag => tag.tagName.escapedText === "tsplus" && typeof tag.comment === "string" && tag.comment.startsWith("getter")
             );
         }
-        function thisifyTsPlusSignature(call: Signature) {
-            const signature = cloneSignature(call);
+        function createTsPlusSignature(call: Signature, exportName: string, file: SourceFile): TsPlusSignature {
+            const signature = cloneSignature(call) as TsPlusSignature
+            signature.tsPlusTag = "TsPlusSignature";
+            signature.tsPlusFile = file;
+            signature.tsPlusExportName = exportName;
+            return signature
+        }
+        function thisifyTsPlusSignature(call: Signature, exportName: string, file: SourceFile) {
+            const signature = createTsPlusSignature(call, exportName, file);
             const target = signature.parameters[0];
             signature.thisParameter = createSymbolWithType(createSymbol(target.flags, "this" as __String), getTypeOfSymbol(target));
             const typePredicate = getTypePredicateOfSignature(call);
@@ -43084,19 +43124,10 @@ namespace ts {
             signature.instantiations = call.instantiations;
             return signature;
         }
-        function createTsPlusFluentFunctionSymbol(name: string, dataFirst: FunctionDeclaration, signatures: Signature[]): TsPlusFluentSymbol {
+        function createTsPlusFluentSymbol(name: string, signatures: TsPlusSignature[]): TsPlusFluentSymbol {
             const symbol = createSymbol(SymbolFlags.Function, name as __String) as TsPlusFluentSymbol;
             symbol.tsPlusTag = TsPlusSymbolTag.Fluent;
-            symbol.tsPlusDeclaration = dataFirst;
             symbol.tsPlusResolvedSignatures = signatures;
-            symbol.tsPlusName = name;
-            return symbol;
-        }
-        function createTsPlusFluentVariableSymbol(name: string, declaration: VariableDeclaration & { name: Identifier }, signatures: Signature[]): TsPlusFluentVariableSymbol {
-            const symbol = createSymbol(SymbolFlags.Function, name as __String) as TsPlusFluentVariableSymbol;
-            symbol.tsPlusTag = TsPlusSymbolTag.FluentVariable;
-            symbol.tsPlusDeclaration = declaration;
-            symbol.tsPlusResolvedSignatures = signatures as SignatureWithParameters[];
             symbol.tsPlusName = name;
             return symbol;
         }
@@ -43109,16 +43140,19 @@ namespace ts {
             symbol.tsPlusName = name;
             return symbol;
         }
-        function createTsPlusStaticFunctionSymbol(name: string, dataFirst: FunctionDeclaration, signatures: Signature[]): TsPlusStaticSymbol {
-            const symbol = createSymbol(SymbolFlags.Function, name as __String) as TsPlusStaticSymbol;
-            symbol.tsPlusTag = TsPlusSymbolTag.Static;
-            symbol.tsPlusDeclaration = dataFirst;
+        function createTsPlusStaticSymbol(name: string, signatures: Signature[]): TsPlusStaticFunctionSymbol {
+            const symbol = createSymbol(SymbolFlags.Function, name as __String) as TsPlusStaticFunctionSymbol;
+            symbol.tsPlusTag = TsPlusSymbolTag.StaticFunction;
             symbol.tsPlusResolvedSignatures = signatures;
             symbol.tsPlusName = name;
             return symbol;
         }
         function createTsPlusStaticVariableSymbol(name: string, declaration: VariableDeclaration, originalSymbol: Symbol): Symbol {
-            const symbol = cloneSymbol(originalSymbol);
+            const symbol = cloneSymbol(originalSymbol) as TsPlusStaticVariableSymbol;
+            symbol.tsPlusTag = TsPlusSymbolTag.StaticVariable;
+            symbol.tsPlusResolvedSignatures = [];
+            symbol.tsPlusName = name;
+            symbol.tsPlusDeclaration = declaration as VariableDeclaration & { name: Identifier };
             symbol.escapedName = name as __String;
             const patchedDeclaration = factory.updateVariableDeclaration(
                 declaration,
@@ -43144,22 +43178,16 @@ namespace ts {
             symbol.tsPlusName = name;
             return symbol;
         }
-        function getTsPlusFluentSymbolForFunctionDeclaration(name: string, dataFirst: FunctionDeclaration) {
+        function getTsPlusFluentSignaturesForFunctionDeclaration(file: SourceFile, exportName: string, dataFirst: FunctionDeclaration) {
             const type = getTypeOfNode(dataFirst);
             const signatures = getSignaturesOfType(type, SignatureKind.Call);
-            const methods = signatures.map(thisifyTsPlusSignature);
-            const symbol = createTsPlusFluentFunctionSymbol(name, dataFirst, methods);
-            const final = createAnonymousType(symbol, emptySymbols, methods, [], []);
-            return createSymbolWithType(symbol, final);
+            return signatures.map((signature) => thisifyTsPlusSignature(signature, exportName, file));
         }
-        function getTsPlusFluentSymbolForVariableDeclaration(name: string, declaration: VariableDeclaration & { name: Identifier }) {
+        function getTsPlusFluentSignaturesForVariableDeclaration(file: SourceFile, exportName: string, declaration: VariableDeclaration & { name: Identifier }) {
             const type = getTypeOfNode(declaration);
             const signatures = getSignaturesOfType(type, SignatureKind.Call);
             if(signatures.every((sigSymbol) => sigSymbol.parameters.every((paramSymbol) => paramSymbol.valueDeclaration && isVariableLike(paramSymbol.valueDeclaration) && isParameterDeclaration(paramSymbol.valueDeclaration)))) {
-                const methods = signatures.map(thisifyTsPlusSignature);
-                const symbol = createTsPlusFluentVariableSymbol(name, declaration, methods);
-                const final = createAnonymousType(symbol, emptySymbols, methods, [], []);
-                return createSymbolWithType(symbol, final);
+                return signatures.map((signature) => thisifyTsPlusSignature(signature, exportName, file));
             }
         }
         function getTsPlusGetterSymbolForFunctionDeclaration(_name: string, _dataFirst: FunctionDeclaration) {
@@ -43188,12 +43216,9 @@ namespace ts {
                 return createTsPlusGetterVariableSymbol(name, declaration, res, getTypeOfNode(selfNode));
             };
         }
-        function getTsPlusStaticSymbolForFunctionDeclaration(name: string, dataFirst: FunctionDeclaration) {
+        function getTsPlusStaticSignaturesForFunctionDeclaration(file: SourceFile, exportName: string, dataFirst: FunctionDeclaration) {
             const signatures = getSignaturesOfType(getTypeOfNode(dataFirst), SignatureKind.Call);
-            const methods = signatures.map(cloneSignature);
-            const symbol = createTsPlusStaticFunctionSymbol(name, dataFirst, methods);
-            const final = createAnonymousType(symbol, emptySymbols, methods, [], []);
-            return createSymbolWithType(symbol, final);
+            return map(signatures, (s) => createTsPlusSignature(s, exportName, file));
         }
         function addToTypeSymbolCache(symbol: Symbol, tag: string, priority: "before" | "after") {
             if (!typeSymbolCache.has(symbol)) {
@@ -43236,16 +43261,15 @@ namespace ts {
             const staticTags = collectTsPlusStaticTags(statement);
             for (const staticTag of staticTags) {
                 const [, target, name] = staticTag.comment.split(" ");
-                if (!staticCache.has(target)) {
-                    staticCache.set(target, new Map());
+                if (!staticVariableCache.has(target)) {
+                    staticVariableCache.set(target, new Map());
                 }
-                const map = staticCache.get(target)!;
+                const map = staticVariableCache.get(target)!;
                 const declaration = statement.declarationList.declarations[0];
                 const symbol = getSymbolAtLocation(declaration.name);
                 if (symbol) {
-                    const patched = createTsPlusStaticVariableSymbol(name, declaration, symbol);
                     map.set(name, {
-                        patched,
+                        patched: createTsPlusStaticVariableSymbol(name, declaration, symbol),
                         definition: file,
                         exportName: symbol.escapedName.toString()
                     })
@@ -43259,17 +43283,22 @@ namespace ts {
                     const fluentTags = collectTsPlusFluentTags(declaration);
                     for (const fluentTag of fluentTags) {
                         const [, target, name] = fluentTag.comment.split(" ");
-                        if (!fluentCache.has(target)) {
-                            fluentCache.set(target, new Map());
+                        if (!fluentTempCache.has(target)) {
+                            fluentTempCache.set(target, new Map());
                         }
-                        const patched = getTsPlusFluentSymbolForVariableDeclaration(
-                            name,
+                        const signatures = getTsPlusFluentSignaturesForVariableDeclaration(
+                            file,
+                            declaration.name.escapedText.toString(),
                             (declaration as VariableDeclaration & { name: Identifier })
                         )
-                        if(patched) {
-                            const map = fluentCache.get(target)!;
-                            map.set(name, {
-                                patched,
+                        if(signatures) {
+                            const map = fluentTempCache.get(target)!;
+                            if (!map.has(name)) {
+                                map.set(name, new Set());
+                            }
+                            const set = map.get(name)!
+                            set.add({
+                                signatures,
                                 exportName: declaration.name.escapedText.toString(),
                                 definition: file
                             })
@@ -43329,12 +43358,16 @@ namespace ts {
                 const fluentTags = collectTsPlusFluentTags(declaration);
                 for (const fluentTag of fluentTags) {
                     const [, target, name] = fluentTag.comment.split(" ");
-                    if (!fluentCache.has(target)) {
-                        fluentCache.set(target, new Map());
+                    if (!fluentTempCache.has(target)) {
+                        fluentTempCache.set(target, new Map());
                     }
-                    const map = fluentCache.get(target)!;
-                    map.set(name, {
-                        patched: getTsPlusFluentSymbolForFunctionDeclaration(name, declaration),
+                    const map = fluentTempCache.get(target)!;
+                    if (!map.has(name)) {
+                        map.set(name, new Set());
+                    }
+                    const set = map.get(name)!
+                    set.add({
+                        signatures: getTsPlusFluentSignaturesForFunctionDeclaration(file, declaration.name.escapedText.toString(), declaration),
                         exportName: declaration.name.escapedText.toString(),
                         definition: file
                     });
@@ -43363,12 +43396,16 @@ namespace ts {
                 const staticTags = collectTsPlusStaticTags(declaration);
                 for (const staticTag of staticTags) {
                     const [, target, name] = staticTag.comment.split(" ");
-                    if (!staticCache.has(target)) {
-                        staticCache.set(target, new Map());
+                    if (!staticFunctionTempCache.has(target)) {
+                        staticFunctionTempCache.set(target, new Map());
                     }
-                    const map = staticCache.get(target)!;
-                    map.set(name, {
-                        patched: getTsPlusStaticSymbolForFunctionDeclaration(name, declaration),
+                    const map = staticFunctionTempCache.get(target)!;
+                    if (!map.has(name)) {
+                        map.set(name, new Set());
+                    }
+                    const set = map.get(name)!
+                    set.add({
+                        signatures: getTsPlusStaticSignaturesForFunctionDeclaration(file, declaration.name.escapedText.toString(), declaration),
                         exportName: declaration.name.escapedText.toString(),
                         definition: file
                     });
@@ -43422,11 +43459,17 @@ namespace ts {
                 }
             }
         }
+        // function isTsPlusTransientStaticSymbol(symbol: Symbol): symbol is TsPlusTransientStaticSymbol {
+        //     return 'tsPlusTag' in symbol && (symbol as TsPlusTransientStaticSymbol).tsPlusTag === TsPlusTransientSymbolTag.Static
+        // }
         function initTsPlusTypeChecker() {
             fluentCache.clear();
+            fluentTempCache.clear();
             operatorCache.clear();
             typeSymbolCache.clear();
-            staticCache.clear();
+            staticFunctionTempCache.clear();
+            staticFunctionCache.clear();
+            staticVariableCache.clear();
             identityCache.clear();
             getterCache.clear();
             callCache.clear();
@@ -43435,6 +43478,38 @@ namespace ts {
             for (const file of host.getSourceFiles()) {
                 collectTsPlusSymbols(file, file.statements);
             }
+
+            fluentTempCache.forEach((map, typeName) => {
+                if (!fluentCache.has(typeName)) {
+                    fluentCache.set(typeName, new Map());
+                }
+                const cache = fluentCache.get(typeName)!;
+                map.forEach((members, funcName) => {
+                    const signatures: TsPlusSignature[] = []
+                    members.forEach((cached) => {
+                        signatures.push(...cached.signatures);
+                    })
+                    const symbol = createTsPlusFluentSymbol(funcName, signatures);
+                    const type = createAnonymousType(symbol, emptySymbols, signatures, [], []);
+                    cache.set(funcName, { patched: createSymbolWithType(symbol, type), signatures })
+                })
+            })
+
+            staticFunctionTempCache.forEach((map, typeName) => {
+                if (!staticFunctionCache.has(typeName)) {
+                    staticFunctionCache.set(typeName, new Map());
+                }
+                const cache = staticFunctionCache.get(typeName)!;
+                map.forEach((members, funcName) => {
+                    const signatures: TsPlusSignature[] = []
+                    members.forEach((cached) => {
+                        signatures.push(...cached.signatures)
+                    })
+                    const symbol = createTsPlusStaticSymbol(funcName, signatures);
+                    const type = createAnonymousType(symbol, emptySymbols, signatures, [], []);
+                    cache.set(funcName, { patched: createSymbolWithType(symbol, type), signatures })
+                })
+            })
         }
         // TSPLUS EXTENSION END
 
@@ -45403,6 +45478,9 @@ namespace ts {
     export function isTsPlusSymbol(symbol: Symbol): symbol is TsPlusSymbol {
         return 'tsPlusTag' in symbol;
     }
+    export function isTsPlusSignature(signature: Signature): signature is TsPlusSignature {
+        return 'tsPlusTag' in signature;
+    }
     export function getNameForType(type: Type | undefined): string | undefined {
         if(!type) {
             return;
@@ -45429,7 +45507,6 @@ namespace ts {
     }
     export function getThisTypeNameForTsPlusSymbol(symbol: TsPlusSymbol): string {
         switch(symbol.tsPlusTag) {
-            case TsPlusSymbolTag.FluentVariable:
             case TsPlusSymbolTag.Fluent: {
                 if(symbol.tsPlusResolvedSignatures[0] && symbol.tsPlusResolvedSignatures[0].thisParameter) {
                     return getNameForType((symbol.tsPlusResolvedSignatures[0].thisParameter as TransientSymbol).type) || anon;
@@ -45440,7 +45517,7 @@ namespace ts {
             case TsPlusSymbolTag.Getter: {
                 return getNameForType(symbol.tsPlusSelfType) || anon;
             }
-            case TsPlusSymbolTag.Static: {
+            case TsPlusSymbolTag.StaticFunction: {
                 // Statics do not have a `this` type
                 break;
             }
@@ -45459,6 +45536,38 @@ namespace ts {
 
     export function isTsPlusType(type: Type): type is TsPlusType {
         return "tsPlusSymbol" in type;
+    }
+
+    type TsPlusSymbolWithDeclaration = Omit<TsPlusType, "tsPlusSymbol"> & {
+        tsPlusSymbol: TsPlusGetterSymbol | TsPlusGetterVariableSymbol | TsPlusStaticVariableSymbol
+    }
+
+    export function isTsPlusTypeWithDeclaration(type: Type): type is TsPlusSymbolWithDeclaration {
+        return isTsPlusType(type) && (
+            type.tsPlusSymbol.tsPlusTag === TsPlusSymbolTag.Getter ||
+            type.tsPlusSymbol.tsPlusTag === TsPlusSymbolTag.GetterVariable ||
+            type.tsPlusSymbol.tsPlusTag === TsPlusSymbolTag.StaticVariable
+        )
+    }
+
+    export function getDeclarationForTsPlus(checker: TypeChecker, node: Node, symbol: TsPlusSymbol): Declaration | undefined {
+        switch (symbol.tsPlusTag) {
+            case TsPlusSymbolTag.StaticFunction:
+            case TsPlusSymbolTag.Fluent: {
+                if (isCallLikeExpression(node)) {
+                    const signature = checker.getResolvedSignature(node)
+                    if (signature && signature.declaration) {
+                        return signature.declaration
+                    }
+                }
+                break;
+            }
+            case TsPlusSymbolTag.StaticVariable:
+            case TsPlusSymbolTag.Getter:
+            case TsPlusSymbolTag.GetterVariable: {
+                return symbol.tsPlusDeclaration
+            }
+        }
     }
 
     // TSPLUS EXTENSION END

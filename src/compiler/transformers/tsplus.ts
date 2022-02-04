@@ -148,10 +148,34 @@ namespace ts {
                 const expressionType = checker.getTypeAtLocation(node.expression);
                 const inType = checker.getPropertyOfType(expressionType, node.name.escapedText.toString());
                 if (!inType) {
-                    const staticExtension = checker.getStaticExtension(expressionType, node.name.escapedText.toString());
+                    if (isCallExpression(node.parent) && node.parent.expression === node) {
+                        const staticFunctionExtension = checker.getStaticFunctionExtension(expressionType, node.name.escapedText.toString());
+                        if (staticFunctionExtension) {
+                            let targetSignature = staticFunctionExtension.signatures[0];
 
-                    if (staticExtension) {
-                        return getPathOfExtension(context.factory, importer, staticExtension, source);
+                            if (staticFunctionExtension.signatures.length > 1) {
+                                const resolvedSignature = checker.getResolvedSignature(node.parent);
+                                if (resolvedSignature) {
+                                    if (isTsPlusSignature(resolvedSignature)) {
+                                        targetSignature = resolvedSignature;
+                                    }
+                                    else if (resolvedSignature.target && isTsPlusSignature(resolvedSignature.target)) {
+                                        targetSignature = resolvedSignature.target;
+                                    }
+                                }
+                            }
+                            if (!targetSignature || !isTsPlusSignature(targetSignature)) {
+                                throw new Error("BUG: No applicable signature found for fluent extension");
+                            }
+
+                            return getPathOfExtension(context.factory, importer, { definition: targetSignature.tsPlusFile, exportName: targetSignature.tsPlusExportName }, source);
+                        }
+                    }
+
+                    const staticVariableExtension = checker.getStaticVariableExtension(expressionType, node.name.escapedText.toString());
+
+                    if (staticVariableExtension) {
+                        return getPathOfExtension(context.factory, importer, staticVariableExtension, source);
                     }
                     
                     const getterExtension = checker.getGetterExtension(expressionType, node.name.escapedText.toString());
@@ -184,12 +208,28 @@ namespace ts {
                 }
                 const expressionType = checker.getTypeAtLocation(node.expression)
                 if (checker.getSignaturesOfType(expressionType, SignatureKind.Call).length === 0) {
-                    const customCall = checker.getStaticExtension(expressionType, "__call")
+                    const customCall = checker.getStaticFunctionExtension(expressionType, "__call")
                     if (customCall) {
+                        let targetSignature = customCall.signatures[0];
+
+                        if (customCall.signatures.length > 1) {
+                            const resolvedSignature = checker.getResolvedSignature(node);
+                            if (resolvedSignature) {
+                                if (isTsPlusSignature(resolvedSignature)) {
+                                    targetSignature = resolvedSignature;
+                                }
+                                else if (resolvedSignature.target && isTsPlusSignature(resolvedSignature.target)) {
+                                    targetSignature = resolvedSignature.target;
+                                }
+                            }
+                        }
+                        if (!targetSignature || !isTsPlusSignature(targetSignature)) {
+                            throw new Error("BUG: No applicable signature found for fluent extension");
+                        }
                         const visited = visitCallExpression(source, traceInScope, node as CallExpression, visitor, context) as CallExpression;
                         return factory.updateCallExpression(
                             visited as CallExpression,
-                            getPathOfExtension(context.factory, importer, customCall, source),
+                            getPathOfExtension(context.factory, importer, { definition: targetSignature.tsPlusFile, exportName: targetSignature.tsPlusExportName }, source),
                             (visited as CallExpression).typeArguments,
                             (visited as CallExpression).arguments
                         );
@@ -202,10 +242,30 @@ namespace ts {
                         const fluentExtension = checker.getFluentExtension(innerExpressionType, (node.expression as PropertyAccessExpression).name.escapedText.toString());
 
                         if (fluentExtension) {
+                            let targetSignature: Signature = fluentExtension.signatures[0];
+
+                            if (fluentExtension.signatures.length > 1) {
+                                const resolvedSignature = checker.getResolvedSignature(node);
+                                if (resolvedSignature) {
+                                    // For signatures with type arguments, TsPlusSignature will be signature.target.
+                                    // For signatures without type arguments, TsPlusSignature is the signature itself.
+                                    if (isTsPlusSignature(resolvedSignature)) {
+                                        targetSignature = resolvedSignature
+                                    }
+                                    else if (resolvedSignature.target && isTsPlusSignature(resolvedSignature.target)) {
+                                        targetSignature = resolvedSignature.target
+                                    }
+                                }
+                            }
+
+                            if (!targetSignature || !isTsPlusSignature(targetSignature)) {
+                                throw new Error("BUG: No applicable signature found for fluent extension");
+                            }
+                            
                             const visited = visitCallExpression(source, traceInScope, node as CallExpression, visitor, context) as CallExpression;
                             return factory.updateCallExpression(
                                 visited as CallExpression,
-                                getPathOfExtension(context.factory, importer, fluentExtension, source),
+                                getPathOfExtension(context.factory, importer, { definition: targetSignature.tsPlusFile, exportName: targetSignature.tsPlusExportName }, source),
                                 (visited as CallExpression).typeArguments,
                                 [((visited as CallExpression).expression as PropertyAccessExpression).expression, ...(visited as CallExpression).arguments]
                             );

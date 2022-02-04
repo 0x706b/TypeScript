@@ -3309,34 +3309,29 @@ namespace ts {
 
     export const enum TsPlusSymbolTag {
         Fluent = "TsPlusFluentSymbol",
-        FluentVariable = "TsPlusFluentVariableSymbol",
-        Static = "TsPlusStaticSymbol",
+        StaticFunction = "TsPlusStaticFunctionSymbol",
+        StaticVariable = "TsPlusStaticVariableSymbol",
         Getter = "TsPlusGetterSymbol",
         GetterVariable = "TsPlusGetterVariableSymbol"
     }
 
     export interface TsPlusFluentSymbol extends TransientSymbol {
-        tsPlusTag: TsPlusSymbolTag.Fluent
-        tsPlusDeclaration: FunctionDeclaration;
+        tsPlusTag: TsPlusSymbolTag.Fluent;
+        tsPlusName: string;
+        tsPlusResolvedSignatures: TsPlusSignature[];
+    }
+
+    export interface TsPlusStaticFunctionSymbol extends TransientSymbol {
+        tsPlusTag: TsPlusSymbolTag.StaticFunction;
         tsPlusResolvedSignatures: Signature[];
         tsPlusName: string;
     }
 
-    export type SignatureWithParameters = Omit<Signature, "parameters"> & { parameters: ReadonlyArray<Symbol & { valueDeclaration: ParameterDeclaration }> }
-
-    export interface TsPlusFluentVariableSymbol extends TransientSymbol {
-        tsPlusTag: TsPlusSymbolTag.FluentVariable;
+    export interface TsPlusStaticVariableSymbol extends TransientSymbol {
+        tsPlusTag: TsPlusSymbolTag.StaticVariable;
+        tsPlusResolvedSignatures: TsPlusSignature[];
+        tsPlusName: string;
         tsPlusDeclaration: VariableDeclaration & { name: Identifier };
-        tsPlusParameters: ReadonlyArray<ParameterDeclaration>;
-        tsPlusResolvedSignatures: SignatureWithParameters[];
-        tsPlusName: string;
-    }
-
-    export interface TsPlusStaticSymbol extends TransientSymbol {
-        tsPlusTag: TsPlusSymbolTag.Static;
-        tsPlusDeclaration: FunctionDeclaration;
-        tsPlusResolvedSignatures: Signature[];
-        tsPlusName: string;
     }
 
     export interface TsPlusGetterSymbol extends TransientSymbol {
@@ -3355,13 +3350,35 @@ namespace ts {
 
     export type TsPlusSymbol =
         | TsPlusFluentSymbol
-        | TsPlusStaticSymbol
+        | TsPlusStaticFunctionSymbol
+        | TsPlusStaticVariableSymbol
         | TsPlusGetterSymbol
-        | TsPlusFluentVariableSymbol
         | TsPlusGetterVariableSymbol;
+
+    export interface TsPlusFluentExtension {
+        patched: Symbol;
+        signatures: readonly TsPlusSignature[];
+    }
+
+    export interface TsPlusStaticFunctionExtension {
+        patched: Symbol;
+        signatures: readonly TsPlusSignature[];
+    }
+
+    export interface TsPlusStaticVariableExtension {
+        patched: Symbol
+        definition: SourceFile
+        exportName: string
+    }
 
     export interface TsPlusType extends Type {
         tsPlusSymbol: TsPlusSymbol;
+    }
+
+    export interface TsPlusSignature extends Signature {
+        tsPlusTag: "TsPlusSignature";
+        tsPlusFile: SourceFile;
+        tsPlusExportName: string;
     }
 
     export interface JSDocLink extends Node {
@@ -4530,13 +4547,14 @@ namespace ts {
         getGlobalImport(file: SourceFile): string
         getLocalImport(from: SourceFile, file: SourceFile): string
         getExtensions(selfNode: Expression): ESMap<string, Symbol>
-        getFluentExtension(target: Type, name: string): { patched: Symbol, definition: SourceFile, exportName: string } | undefined
+        getFluentExtension(target: Type, name: string): TsPlusFluentExtension | undefined
         getGetterExtension(target: Type, name: string): { definition: SourceFile, exportName: string } | undefined
-        getStaticExtension(target: Type, name: string): { patched: Symbol, definition: SourceFile, exportName: string } | undefined
+        getStaticFunctionExtension(target: Type, name: string): TsPlusStaticFunctionExtension | undefined
+        getStaticVariableExtension(target: Type, name: string): TsPlusStaticVariableExtension | undefined
         getOperatorExtension(target: Type, name: string): { patched: Symbol, definition: SourceFile, exportName: string } | undefined
         shouldMakeLazy(signatureParam: Symbol, callArg: Type): boolean
         isPipeCall(node: CallExpression): boolean
-        getCallExtension(node: Node): { patched: Symbol, definition: SourceFile, exportName: string } | undefined
+        getCallExtension(node: Node): TsPlusStaticFunctionExtension | undefined
         isTailRec(node: Node): boolean
         cloneSymbol(symbol: Symbol): Symbol
         getTextOfBinaryOp(kind: SyntaxKind): string | undefined
