@@ -44552,6 +44552,12 @@ namespace ts {
                 collectTsPlusSymbols(file, file.statements);
             }
 
+            fluentUnresolvedCache.forEach((map) => {
+                map.forEach((extension) => {
+                    resolveFluentExtension(extension);
+                });
+            });
+
             pipeableCache.forEach((map, typeName) => {
                 if (!fluentUnresolvedCache.has(typeName)) {
                     fluentUnresolvedCache.set(typeName, new Map());
