@@ -20,6 +20,10 @@ export const prog = Effect.do
   .map(({ a, b, c, d: { tuple: [e, f] } }) => `result: ${a + b + c} ${e} ${f}`)
   .flatMap((s) => Effect(console.log(s)));
 
+const x1 = Effect(1) > Effect(2)
+
+x1.unsafeRunPromise()
+
 export const result = prog | Effect.fail("error");
 
 export const zipped = Effect.succeed(0) + Effect.succeed(1)

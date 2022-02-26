@@ -14963,6 +14963,7 @@ namespace ts {
             declaration: Declaration,
             args: Expression[],
             checkMode: CheckMode | undefined,
+            reportNode?: Node,
             addDiagnostic?: (_: Diagnostic) => void,
         ): Type {
             const funcType = getTypeOfNode(declaration);
@@ -14974,6 +14975,10 @@ namespace ts {
                 args
             );
             setParent(node, declaration.parent);
+            if (reportNode) {
+                setTextRangePos(node, reportNode.pos);
+                setTextRangeEnd(node, reportNode.end);
+            }
             if (candidate.typeParameters) {
                 const inferenceContext = createInferenceContext(
                     candidate.typeParameters,
@@ -34297,6 +34302,7 @@ namespace ts {
                             declaration as FunctionDeclaration,
                             [left, right],
                             CheckMode.Normal,
+                            operatorToken,
                             (_) => diagnostics.add(_)
                         );
                     }
