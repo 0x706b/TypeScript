@@ -368,6 +368,7 @@ namespace ts {
         const callCache = new Map<Node, TsPlusStaticFunctionExtension>();
         const indexCache = new Map<string, { declaration: FunctionDeclaration, definition: SourceFile, exportName: string }>();
         const indexAccessExpressionCache = new Map<Node, { declaration: FunctionDeclaration, definition: SourceFile, exportName: string }>();
+        const inheritanceSymbolCache = new Map<Symbol, Set<Symbol>>()
         let tsplusStringPrimitiveSymbol: Symbol;
         let tsplusNumberPrimitiveSymbol: Symbol;
         let tsplusBooleanPrimitiveSymbol: Symbol;
@@ -861,13 +862,39 @@ namespace ts {
                 return extension;
             }
         }
+        interface Stack<A> {
+            value: A
+            previous?: Stack<A>
+        }
+        function makeStack<A>(value: A, previous?: Stack<A>): Stack<A> {
+            return { value, previous };
+        }
         function collectRelevantSymbols(target: Type) {
             const relevant: Set<Symbol> = new Set();
-            if (target.symbol) {
-                relevant.add(target.symbol);
-            }
-            if (target.aliasSymbol) {
-                relevant.add(target.aliasSymbol);
+            let stack: Stack<Type> | undefined = makeStack(target);
+            while (stack) {
+                const target = stack.value
+                stack = stack.previous
+                if (target.symbol) {
+                    relevant.add(target.symbol)
+                    if (inheritanceSymbolCache.has(target.symbol)) {
+                        const heritage = inheritanceSymbolCache.get(target.symbol)!;
+                        heritage.forEach((s) => {
+                            const type = getTypeOfSymbol(s);
+                            if (isErrorType(type)) {
+                                const declaredType = getDeclaredTypeOfSymbol(s);
+                                if (!isErrorType(declaredType)) {
+                                    stack = makeStack(declaredType, stack);
+                                }
+                            } else {
+                                stack = makeStack(type, stack)
+                            }
+                        })
+                    }
+                }
+                if (target.aliasSymbol) {
+                    relevant.add(target.aliasSymbol)
+                }
             }
             const returnArray: Symbol[] = []
             relevant.forEach((s) => {
@@ -44108,6 +44135,9 @@ namespace ts {
                 }
                 if (type.symbol) {
                     addToTypeSymbolCache(type.symbol, typeTag, "after");
+                    if ((isInterfaceDeclaration(declaration) || isClassDeclaration(declaration)) && declaration.heritageClauses) {
+                        tryCacheTsPlusInheritance(type.symbol, declaration.heritageClauses);
+                    }
                 }
                 if (type.aliasSymbol) {
                     addToTypeSymbolCache(type.aliasSymbol, typeTag, "after");
@@ -44124,6 +44154,20 @@ namespace ts {
                     }
                 }
             }
+        }
+        function tryCacheTsPlusInheritance(typeSymbol: Symbol, heritage: readonly HeritageClause[]): void {
+            if (!inheritanceSymbolCache.has(typeSymbol)) {
+                inheritanceSymbolCache.set(typeSymbol, new Set());
+            }
+            const heritageExtensions = inheritanceSymbolCache.get(typeSymbol)!;
+            forEach(heritage, (clause) => {
+                forEach(clause.types, (node) => {
+                    const type = getTypeOfNode(node);
+                    if (type.symbol) {
+                        heritageExtensions.add(type.symbol)
+                    }
+                })
+            })
         }
         function tryCacheTsPlusCompanion(declaration: ClassDeclaration): void {
             const tag = collectTsPlusCompanionTags(declaration)[0];
@@ -44570,6 +44614,7 @@ namespace ts {
             indexCache.clear();
             indexAccessExpressionCache.clear();
             pipeableCache.clear();
+            inheritanceSymbolCache.clear();
             for (const file of host.getSourceFiles()) {
                 collectTsPlusSymbols(file, file.statements);
             }
