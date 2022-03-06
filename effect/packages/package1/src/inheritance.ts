@@ -60,3 +60,8 @@ export function mapList<A>(fa: List2<A>, f: (a: A) => A): List2<A> {
 }
 
 List.mapList(mkList2([1, 2, 3]), (n) => n);
+
+/**
+ * @tsplus fluent List test
+ */
+export function test<A extends ReadonlyArray<any>>(...args: A): A {}
