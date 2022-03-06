@@ -355,7 +355,7 @@ namespace ts {
         const typeSymbolCache = new Map<Symbol, string[]>();
         const companionSymbolCache = new Map<Symbol, string[]>();
         const resolvedFluentCache = new Map<string, ESMap<string, TsPlusFluentExtension>>();
-        const fluentCache = new Map<string, ESMap<string, () => TsPlusFluentExtension>>();
+        const fluentCache = new Map<string, ESMap<string, () => TsPlusFluentExtension | undefined>>();
         const unresolvedFluentCache = new Map<string, ESMap<string, TsPlusUnresolvedFluentExtension>>();
         const getterCache = new Map<string, ESMap<string, { patched: (node: Expression) => Symbol | undefined, definition: SourceFile, exportName: string }>>();
         const operatorCache = new Map<string, ESMap<string, { patched: Symbol, definition: SourceFile, exportName: string }>>();
@@ -913,7 +913,10 @@ namespace ts {
                         const _fluent = fluentCache.get(typeSymbol);
                         if (_fluent) {
                             _fluent.forEach((v, k) => {
-                                copy.set(k, v().patched);
+                                const extension = v()
+                                if (extension) {
+                                    copy.set(k, extension.patched);
+                                }
                             });
                         }
                         const _getter = getterCache.get(typeSymbol);
@@ -29284,7 +29287,7 @@ namespace ts {
             }
             const fluentExtension = fluentMap.get(funcName)!();
             const pipeableExtension = pipeableMap.get(funcName)!;
-            if (some(fluentExtension.types, ({ type: fluentType }) => isTypeAssignableTo(pipeableExtension.type, fluentType))) {
+            if (!fluentExtension || some(fluentExtension.types, ({ type: fluentType }) => isTypeAssignableTo(pipeableExtension.type, fluentType))) {
                 return;
             }
             else {
@@ -43728,8 +43731,12 @@ namespace ts {
             signature.tsPlusExportName = exportName;
             return signature
         }
-        function thisifyTsPlusSignature(call: Signature, exportName: string, file: SourceFile) {
+        function thisifyTsPlusSignature(call: Signature, exportName: string, file: SourceFile, reportDiagnostic: (diagnostic: DiagnosticMessage) => void) {
             const signature = createTsPlusSignature(call, exportName, file);
+            if (isSelfATupleType(signature)) {
+                reportDiagnostic(Diagnostics.The_first_parameter_of_a_fluent_function_cannot_be_a_tuple_type);
+                return undefined;
+            }
             const target = signature.parameters[0];
             signature.thisParameter = createSymbolWithType(createSymbol(target.flags, "this" as __String), getTypeOfSymbol(target));
             const typePredicate = getTypePredicateOfSignature(call);
@@ -43807,18 +43814,30 @@ namespace ts {
             return symbol;
         }
         function getTsPlusFluentSignaturesForFunctionDeclaration(file: SourceFile, exportName: string, dataFirst: FunctionDeclaration) {
+            function reportDiagnostic(message: DiagnosticMessage) {
+                error(dataFirst, message);
+            }
             const type = getTypeOfNode(dataFirst);
             const signatures = getSignaturesOfType(type, SignatureKind.Call);
-            const thisifiedSignatures = signatures.map((signature) => thisifyTsPlusSignature(signature, exportName, file))
-            const thisifiedType = createAnonymousType(undefined, emptySymbols, thisifiedSignatures, [], [])
+            const thisifiedSignatures = signatures.map((signature) => thisifyTsPlusSignature(signature, exportName, file, reportDiagnostic))
+            if (!isEachDefined(thisifiedSignatures)) {
+                return;
+            }
+            const thisifiedType = createAnonymousType(undefined, emptySymbols, thisifiedSignatures as TsPlusSignature[], [], [])
             return [thisifiedType, thisifiedSignatures] as const;
         }
         function getTsPlusFluentSignaturesForVariableDeclaration(file: SourceFile, exportName: string, declaration: VariableDeclaration & { name: Identifier }) {
+            function reportDiagnostic(message: DiagnosticMessage) {
+                error(declaration, message);
+            }
             const type = getTypeOfNode(declaration);
             const signatures = getSignaturesOfType(type, SignatureKind.Call);
             if(signatures.every((sigSymbol) => sigSymbol.parameters.every((paramSymbol) => paramSymbol.valueDeclaration && isVariableLike(paramSymbol.valueDeclaration) && isParameterDeclaration(paramSymbol.valueDeclaration)))) {
-                const thisifiedSignatures = signatures.map((signature) => thisifyTsPlusSignature(signature, exportName, file))
-                const thisifiedType = createAnonymousType(undefined, emptySymbols, thisifiedSignatures, [], []);
+                const thisifiedSignatures = signatures.map((signature) => thisifyTsPlusSignature(signature, exportName, file, reportDiagnostic))
+                if (!isEachDefined(thisifiedSignatures)) {
+                    return;
+                }
+                const thisifiedType = createAnonymousType(undefined, emptySymbols, thisifiedSignatures as TsPlusSignature[], [], []);
                 return [thisifiedType, thisifiedSignatures] as const;
             }
         }
@@ -43872,6 +43891,9 @@ namespace ts {
             }
         }
         function getTsPlusFluentSignatureForPipeableFunction(file: SourceFile, exportName: string, name: string, pipeable: FunctionDeclaration): [Type, TsPlusSignature[]] | undefined {
+            function reportDiagnostic(diagnostic: DiagnosticMessage) {
+                error(pipeable, diagnostic);
+            }
             if (pipeable.body) {
                 const returnStatement = find(
                     pipeable.body.statements,
@@ -43881,6 +43903,10 @@ namespace ts {
                 if (returnStatement && returnStatement.expression.parameters.length === 1) {
                     const type = getTypeOfNode(pipeable);
                     const signatures = getSignaturesOfType(type, SignatureKind.Call);
+                    if (signatures.findIndex(isSelfATupleType)) {
+                        error(pipeable, Diagnostics.The_first_parameter_of_a_pipeable_annotated_function_cannot_be_a_tuple_type);
+                        return;
+                    }
                     const tsPlusSignatures = flatMap(signatures, (sig) => {
                         const returnType = getReturnTypeOfSignature(sig);
                         const returnSignatures = getSignaturesOfType(returnType, SignatureKind.Call);
@@ -43905,7 +43931,10 @@ namespace ts {
                             newDecl.jsDocCache = pipeable.jsDocCache;
                             newSig.declaration = newDecl;
                             newDecl.symbol = createTsPlusPipeableDeclarationSymbol(name, pipeable);
-                            const thisifiedSignature = thisifyTsPlusSignature(newSig, exportName, file);
+                            const thisifiedSignature = thisifyTsPlusSignature(newSig, exportName, file, reportDiagnostic);
+                            if (!thisifiedSignature) {
+                                return;
+                            }
                             thisifiedSignature.tsPlusPipeable = true;
                             return thisifiedSignature;
                         });
@@ -43921,6 +43950,10 @@ namespace ts {
                 const tsPlusSignatures = flatMap(signatures, (sig) => {
                     const returnType = getReturnTypeOfSignature(sig);
                     const returnSignatures = getSignaturesOfType(returnType, SignatureKind.Call);
+                    if (signatures.findIndex(isSelfATupleType)) {
+                        error(pipeable, Diagnostics.The_first_parameter_of_a_pipeable_annotated_function_cannot_be_a_tuple_type);
+                        return;
+                    }
                     return flatMap(returnSignatures, (rsig) => {
                         const newSig = cloneSignature(sig) as TsPlusSignature;
                         newSig.parameters = [...rsig.parameters, ...sig.parameters];
@@ -43942,7 +43975,10 @@ namespace ts {
                         newDecl.jsDocCache = pipeable.jsDocCache;
                         newSig.declaration = newDecl;
                         newDecl.symbol = createTsPlusPipeableDeclarationSymbol(name, pipeable);
-                        const thisifiedSignature = thisifyTsPlusSignature(newSig, exportName, file);
+                        const thisifiedSignature = thisifyTsPlusSignature(newSig, exportName, file, reportDiagnostic);
+                        if (!thisifiedSignature) {
+                            return;
+                        }
                         thisifiedSignature.tsPlusPipeable = true;
                         return thisifiedSignature;
                     });
@@ -43955,7 +43991,18 @@ namespace ts {
         function isVairableDeclarationWithFunction(node: VariableDeclaration): node is VariableDeclarationWithFunction {
             return isIdentifier(node.name) && !!node.initializer && (isArrowFunction(node.initializer) || isFunctionExpression(node.initializer));
         }
+        function isEachDefined<A>(array: (A | undefined)[]): array is A[] {
+            for (const a of array) {
+                if (a === undefined) {
+                    return false;
+                }
+            }
+            return true;
+        }
         function getTsPlusFluentSignatureForPipeableVariableDeclaration(file: SourceFile, exportName: string, name: string, pipeable: VariableDeclarationWithFunction | VariableDeclarationWithFunctionType): [Type, TsPlusSignature[]] | undefined {
+            function reportDiagnostic(diagnostic: DiagnosticMessage) {
+                error(pipeable, diagnostic);
+            }
             if (isVairableDeclarationWithFunction(pipeable)) {
                 const initializer = pipeable.initializer;
                 const body = initializer.body;
@@ -43976,6 +44023,10 @@ namespace ts {
                 if (returnFn && returnFn.parameters.length === 1) {
                     const type = getTypeOfNode(pipeable);
                     const signatures = getSignaturesOfType(type, SignatureKind.Call);
+                    if (signatures.findIndex(isSelfATupleType)) {
+                        error(pipeable, Diagnostics.The_first_parameter_of_a_pipeable_annotated_function_cannot_be_a_tuple_type);
+                        return;
+                    }
                     const tsPlusSignatures = flatMap(signatures, (sig) => {
                         const returnType = getReturnTypeOfSignature(sig);
                         const returnSignatures = getSignaturesOfType(returnType, SignatureKind.Call);
@@ -44013,7 +44064,10 @@ namespace ts {
                             newDecl.jsDocCache = pipeable.jsDocCache;
                             newSig.declaration = newDecl;
                             newDecl.symbol = createTsPlusPipeableDeclarationSymbol(name, pipeable);
-                            const thisifiedSignature = thisifyTsPlusSignature(newSig, exportName, file);
+                            const thisifiedSignature = thisifyTsPlusSignature(newSig, exportName, file, reportDiagnostic);
+                            if (!thisifiedSignature) {
+                                return;
+                            }
                             thisifiedSignature.tsPlusPipeable = true;
                             return thisifiedSignature;
                         });
@@ -44027,6 +44081,10 @@ namespace ts {
                 if (isFunctionTypeNode(returnFn) && returnFn.parameters.length === 1) {
                     const type = getTypeOfNode(pipeable);
                     const signatures = getSignaturesOfType(type, SignatureKind.Call);
+                    if (signatures.findIndex(isSelfATupleType)) {
+                        error(pipeable, Diagnostics.The_first_parameter_of_a_pipeable_annotated_function_cannot_be_a_tuple_type);
+                        return;
+                    }
                     const tsPlusSignatures = flatMap(signatures, (sig) => {
                         const returnType = getReturnTypeOfSignature(sig);
                         const returnSignatures = getSignaturesOfType(returnType, SignatureKind.Call);
@@ -44046,7 +44104,10 @@ namespace ts {
                             newDecl.jsDocCache = pipeable.jsDocCache;
                             newSig.declaration = newDecl;
                             newDecl.symbol = createTsPlusPipeableDeclarationSymbol(name, pipeable);
-                            const thisifiedSignature = thisifyTsPlusSignature(newSig, exportName, file);
+                            const thisifiedSignature = thisifyTsPlusSignature(newSig, exportName, file, reportDiagnostic);
+                            if (!thisifiedSignature) {
+                                return;
+                            }
                             thisifiedSignature.tsPlusPipeable = true;
                             return thisifiedSignature;
                         });
@@ -44056,6 +44117,15 @@ namespace ts {
                 }
             }
             return undefined;
+        }
+        function isSelfATupleType(signature: Signature): boolean {
+            if (signature.parameters[0]) {
+                const type = getTypeOfSymbol(signature.parameters[0]);
+                if (isTupleLikeType(type)) {
+                    return true;
+                }
+            }
+            return false;
         }
         function addToTypeSymbolCache(symbol: Symbol, tag: string, priority: "before" | "after") {
             if (!typeSymbolCache.has(symbol)) {
@@ -44659,9 +44729,12 @@ namespace ts {
 
                         definition.forEach(({ declaration, definition, exportName }) => {
                             if (isFunctionDeclaration(declaration)) {
-                                const [type, signatures] = getTsPlusFluentSignaturesForFunctionDeclaration(definition, exportName, declaration);
-                                allSignatures.push(...signatures);
-                                allTypes.push({ type, signatures });
+                                const typeAndSignatures = getTsPlusFluentSignaturesForFunctionDeclaration(definition, exportName, declaration);
+                                if (typeAndSignatures) {
+                                    const [type, signatures] = typeAndSignatures;
+                                    allSignatures.push(...signatures);
+                                    allTypes.push({ type, signatures });
+                                }
                             }
                             else {
                                 const typeAndSignatures = getTsPlusFluentSignaturesForVariableDeclaration(definition, exportName, declaration);
@@ -44672,6 +44745,9 @@ namespace ts {
                                 }
                             }
                         });
+                        if (allSignatures.length === 0) {
+                            return undefined;
+                        }
                         const symbol = createTsPlusFluentSymbol(name, allSignatures);
                         const type = createAnonymousType(symbol, emptySymbols, allSignatures, [], []);
                         const extension: TsPlusFluentExtension = {
