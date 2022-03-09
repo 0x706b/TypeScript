@@ -897,61 +897,172 @@ namespace ts {
 
             return out;
         }
-        function collectRelevantSymbolsLoop(target: Type) {
-            const seen: Set<Type> = new Set();
-            const relevant: Set<Symbol> = new Set();
-            let stack: Stack<Type> | undefined = makeStack(target);
-            while (stack) {
-                const target = stack.value
-                stack = stack.previous
-                if (target.symbol) {
-                    // Add the current symbol to the return Set
-                    relevant.add(target.symbol)
-                    // Check if the current type inherits other types
-                    if (inheritanceSymbolCache.has(target.symbol)) {
-                        const heritage = inheritanceSymbolCache.get(target.symbol)!;
-                        heritage.forEach((s) => {
-                            if (s.declarations && s.declarations.length > 0) {
-                                for (const decl of s.declarations) {
-                                    // Exclude all declarations but interface and class declarations.
-                                    // Symbol declarations can also include other declarations, such as variable declarations
-                                    // and module declarations, which we do not want to include for inheritance
-                                    if (isInterfaceDeclaration(decl) || isClassDeclaration(decl)) {
-                                        const type = getTypeOfNode(decl);
-                                        if (seen.has(type)) {
-                                            continue;
-                                        }
+        const enum CollectRelevantSymbolsFrameTag {
+            Type = "Type",
+            Alias = "Alias",
+            UnionBoundary = "UnionBoundary",
+            UnionMember = "UnionMember"
+        }
+        class TypeFrame {
+            readonly _tag = CollectRelevantSymbolsFrameTag.Type
+            constructor(readonly type: Type) {}
+        }
+        class TypeAliasFrame {
+            readonly _tag = CollectRelevantSymbolsFrameTag.Alias
+            constructor(readonly typeAlias: Type & { aliasSymbol: Symbol }) {}
+        }
+        class UnionBoundaryFrame {
+            readonly _tag = CollectRelevantSymbolsFrameTag.UnionBoundary
+            constructor(readonly flag: boolean) {}
+        }
+        class UnionMemberFrame {
+            readonly _tag = CollectRelevantSymbolsFrameTag.UnionMember
+            constructor(readonly type: Type) {}
+        }
+        type CollectRelevantSymbolsFrame = TypeFrame | UnionBoundaryFrame | UnionMemberFrame | TypeAliasFrame
 
-                                        if (!isErrorType(type)) {
-                                            seen.add(type);
-                                            stack = makeStack(type, stack)
+        function collectRelevantSymbolsLoop(target: Type) {
+            const visited: Set<Type> = new Set();
+            const relevant: Set<Symbol> = new Set();
+
+            let isInUnionType = false;
+            let visitedInUnion: Set<Type> = new Set();
+            let relevantUnion: Set<Symbol>[] = [];
+            let unionIndex = -1
+
+            let stack: Stack<CollectRelevantSymbolsFrame> | undefined = makeStack(target.symbol ? new TypeFrame(target) : new TypeAliasFrame(target as Type & { aliasSymbol: Symbol }));
+
+            function isVisitedInContext(type: Type) {
+                if (isInUnionType) {
+                    return visitedInUnion.has(type);
+                }
+                else {
+                    return visited.has(type);
+                }
+            }
+    
+            function addRelevantSymbol(symbol: Symbol) {
+                if (isInUnionType) {
+                    relevantUnion[unionIndex].add(symbol);
+                }
+                else {
+                    relevant.add(symbol);
+                }
+            }
+
+            function markTypeAsVisited(type: Type) {
+                if (isInUnionType) {
+                    visitedInUnion.add(type);
+                }
+                else {
+                    visited.add(type);
+                }
+            }
+
+            function pushTypeToStack(type: Type) {
+                if (type.symbol) {
+                    stack = makeStack(new TypeFrame(type), stack);
+                }
+                else if (type.aliasSymbol) {
+                    stack = makeStack(new TypeAliasFrame(type as Type & { aliasSymbol: Symbol }), stack);
+                }
+            }
+
+            function enterUnion() {
+                stack = makeStack(new UnionBoundaryFrame(false), stack);
+            }
+
+            function exitUnion() {
+                stack = makeStack(new UnionBoundaryFrame(true), stack);
+            }
+
+            function pushUnionMember(member: Type) {
+                stack = makeStack(new UnionMemberFrame(member), stack);
+            }
+
+            while (stack) {
+                const current = stack.value
+                stack = stack.previous
+                switch (current._tag) {
+                    case CollectRelevantSymbolsFrameTag.Type: {
+                        const target = current.type;
+                        // Add the current symbol to the return Set
+                        addRelevantSymbol(target.symbol)
+                        // Check if the current type inherits other types
+                        if (inheritanceSymbolCache.has(target.symbol)) {
+                            const heritage = inheritanceSymbolCache.get(target.symbol)!;
+                            heritage.forEach((s) => {
+                                if (s.declarations && s.declarations.length > 0) {
+                                    for (const decl of s.declarations) {
+                                        // Exclude all declarations but interface and class declarations.
+                                        // Symbol declarations can also include other declarations, such as variable declarations
+                                        // and module declarations, which we do not want to include for inheritance
+                                        if (isInterfaceDeclaration(decl) || isClassDeclaration(decl)) {
+                                            const type = getTypeOfNode(decl);
+                                            if (isVisitedInContext(type)) {
+                                                continue;
+                                            }
+
+                                            if (!isErrorType(type)) {
+                                                markTypeAsVisited(type);
+                                                pushTypeToStack(type);
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        })
-                    }
-                }
-                if (target.aliasSymbol) {
-                    relevant.add(target.aliasSymbol);
-                    // If the current type is a union type, add the inherited type symbols common to all members
-                    if (target.flags & TypeFlags.Union) {
-                        const types = (target as UnionType).types;
-                        const inherited: Set<Symbol>[] = []
-                        for (const member of types) {
-                            if (!seen.has(member)) {
-                                seen.add(member);
-                                inherited.push(collectRelevantSymbolsLoop(member));
-                            }
+                            })
                         }
-                        intersectSets(inherited).forEach((s) => {
-                            relevant.add(s)
-                            stack = makeStack(getTypeOfSymbol(s), stack);
+                        break;
+                    }
+                    case CollectRelevantSymbolsFrameTag.Alias: {
+                        const target = current.typeAlias;
+                        addRelevantSymbol(target.aliasSymbol);
+                        // If the current type is a union type, add the inherited type symbols common to all members
+                        if (target.flags & TypeFlags.Union) {
+                            const types = (target as UnionType).types;
+                            enterUnion();
+                            for (const member of types) {
+                                if (!visited.has(member)) {
+                                    visited.add(member);
+                                    pushUnionMember(member);
+                                }
+                            }
+                            exitUnion();
+                        }
+                        break;
+                    }
+                    case CollectRelevantSymbolsFrameTag.UnionBoundary: {
+                        if (current.flag) {
+                            isInUnionType = true;
+                        }
+                        if (!current.flag) {
+                            isInUnionType = false;
+                            unionIndex = -1;
+                            visitedInUnion.forEach((type) => {
+                                visited.add(type);
+                            })
+                            visitedInUnion.clear();
+                            intersectSets(relevantUnion).forEach((symbol) => {
+                                relevant.add(symbol);
+                                pushTypeToStack(getTypeOfSymbol(symbol))
+                            })
+                            relevantUnion = [];
+                        }
+                        break;
+                    }
+                    case CollectRelevantSymbolsFrameTag.UnionMember: {
+                        unionIndex += 1;
+                        relevantUnion[unionIndex] = new Set();
+                        visitedInUnion.forEach((type) => {
+                            visited.add(type);
                         })
+                        visitedInUnion.clear();
+                        pushTypeToStack(current.type);
+                        break;
                     }
                 }
             }
-            seen.clear();
+            visited.clear();
             return relevant;
         }
         /**
