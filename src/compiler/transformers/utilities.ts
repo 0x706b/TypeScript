@@ -13,6 +13,7 @@ namespace ts {
         exportedNames: Identifier[] | undefined; // all exported names in the module, both local and reexported
         exportEquals: ExportAssignment | undefined; // an export= declaration if one was present
         hasExportStarsToExportValues: boolean; // whether this module contains export*
+        generatedExportSpecifiers?: ESMap<Identifier, ExportSpecifier>;
     }
 
     function containsDefaultReference(node: NamedImportBindings | undefined) {
@@ -68,6 +69,7 @@ namespace ts {
     export function collectExternalModuleInfo(context: TransformationContext, sourceFile: SourceFile, resolver: EmitResolver, compilerOptions: CompilerOptions): ExternalModuleInfo {
         const externalImports: (ImportDeclaration | ImportEqualsDeclaration | ExportDeclaration)[] = [];
         const exportSpecifiers = createMultiMap<ExportSpecifier>();
+        const generatedExportSpecifiers = new Map<Identifier, ExportSpecifier>();
         const exportedBindings: Identifier[][] = [];
         const uniqueExports = new Map<string, boolean>();
         let exportedNames: Identifier[] | undefined;
@@ -197,14 +199,19 @@ namespace ts {
             externalImports.unshift(externalHelpersImportDeclaration);
         }
 
-        return { externalImports, exportSpecifiers, exportEquals, hasExportStarsToExportValues, exportedBindings, exportedNames, externalHelpersImportDeclaration };
+        return { externalImports, exportSpecifiers, exportEquals, hasExportStarsToExportValues, exportedBindings, exportedNames, externalHelpersImportDeclaration, generatedExportSpecifiers };
 
         function addExportedNamesForExportDeclaration(node: ExportDeclaration) {
             for (const specifier of cast(node.exportClause, isNamedExports).elements) {
                 if (!uniqueExports.get(idText(specifier.name))) {
                     const name = specifier.propertyName || specifier.name;
                     if (!node.moduleSpecifier) {
-                        exportSpecifiers.add(idText(name), specifier);
+                        if (isGeneratedIdentifier(name)) {
+                            generatedExportSpecifiers.set(name, specifier);
+                        }
+                        else {
+                            exportSpecifiers.add(idText(name), specifier);
+                        }
                     }
 
                     const decl = resolver.getReferencedImportDeclaration(name)
