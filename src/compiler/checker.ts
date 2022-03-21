@@ -878,7 +878,7 @@ namespace ts {
         function makeStack<A>(value: A, previous?: Stack<A>): Stack<A> {
             return { value, previous };
         }
-        function intersectSets<A>(sets: Set<A>[]): Set<A> {
+        function intersectSets<A>(sets: readonly Set<A>[]): Set<A> {
             if (sets.length === 0) {
                 return new Set();
             }
@@ -906,54 +906,68 @@ namespace ts {
 
             return out;
         }
-        function collectRelevantSymbolsLoop(target: Type, lastSeen?: Set<Type>) {
+        function collectRelevantSymbolsLoop(target: Type, depth: number, lastSeen?: Set<Type>) {
             const seen: Set<Type> = new Set(lastSeen);
-            const relevant: Set<Symbol> = new Set();
-            let stack: Stack<Type> | undefined = makeStack(target);
+            const relevant: ESMap<number, Set<Symbol>> = new Map();
+            let stack: Stack<[number, Type]> | undefined = makeStack([depth, target]);
             while (stack) {
-                const target = stack.value
+                const [depth, target] = stack.value
                 stack = stack.previous
+                if (!relevant.has(depth)) {
+                    relevant.set(depth, new Set());
+                }
+                const relevantAtDepth = relevant.get(depth)!;
                 if (target.symbol) {
                     // Add the current symbol to the return Set
-                    relevant.add(target.symbol)
+                    relevantAtDepth.add(target.symbol)
                     // Check if the current type inherits other types
                     if (inheritanceSymbolCache.has(target.symbol)) {
-                        const heritage = inheritanceSymbolCache.get(target.symbol)!;
-                        heritage.forEach(addInheritedSymbol);
+                        inheritanceSymbolCache.get(target.symbol)!.forEach((symbol) => addInheritedSymbol(symbol, depth));
                     }
                     else if (target.symbol.declarations) {
                         target.symbol.declarations.forEach((declaration) => {
                             if ((isInterfaceDeclaration(declaration) || isClassDeclaration(declaration)) && declaration.heritageClauses) {
                                 tryCacheTsPlusInheritance(target.symbol, declaration.heritageClauses);
                                 if (inheritanceSymbolCache.has(target.symbol)) {
-                                    const heritage = inheritanceSymbolCache.get(target.symbol)!;
-                                    heritage.forEach(addInheritedSymbol);
+                                    inheritanceSymbolCache.get(target.symbol)!.forEach((symbol) => addInheritedSymbol(symbol, depth));
                                 }
                             }
                         })
                     }
                 }
                 if (target.aliasSymbol) {
-                    relevant.add(target.aliasSymbol);
+                    relevantAtDepth.add(target.aliasSymbol);
                     if (inheritanceSymbolCache.has(target.aliasSymbol)) {
-                        const heritage = inheritanceSymbolCache.get(target.aliasSymbol)!;
-                        heritage.forEach(addInheritedSymbol);
+                        inheritanceSymbolCache.get(target.aliasSymbol)!.forEach((symbol) => addInheritedSymbol(symbol, depth));
                     }
                     // If the current type is a union type, add the inherited type symbols common to all members
                     if (target.flags & TypeFlags.Union) {
                         const types = (target as UnionType).types;
-                        const inherited: Set<Symbol>[] = []
+                        const inherited: ESMap<number, Set<Symbol>>[] = []
                         for (const member of types) {
                             if (!seen.has(member)) {
-                                inherited.push(collectRelevantSymbolsLoop(member, seen));
+                                inherited.push(collectRelevantSymbolsLoop(member, depth + 1, seen));
                             }
                         }
                         // Add union members as "seen" only after the union has been collected
                         for (const member of types) {
                             seen.add(member);
                         }
-                        intersectSets(inherited).forEach((s) => {
-                            relevant.add(s)
+
+                        const keep = intersectSets(flatMap(inherited, (map) => arrayFrom(map.values())))
+
+                        inherited.forEach((map) => {
+                            map.forEach((symbols, depth) => {
+                                if (!relevant.has(depth)) {
+                                    relevant.set(depth, new Set());
+                                }
+                                const relevantAtDepth = relevant.get(depth)!;
+                                symbols.forEach((symbol) => {
+                                    if (keep.has(symbol)) {
+                                        relevantAtDepth.add(symbol)
+                                    }
+                                })
+                            })
                         })
                     }
                 }
@@ -961,7 +975,7 @@ namespace ts {
             seen.clear();
             return relevant;
 
-            function addInheritedSymbol(symbol: Symbol) {
+            function addInheritedSymbol(symbol: Symbol, depth: number) {
                 if (symbol.declarations && symbol.declarations.length > 0) {
                     for (const decl of symbol.declarations) {
                         // Exclude all declarations but interface and class declarations.
@@ -975,7 +989,7 @@ namespace ts {
 
                             if (!isErrorType(type)) {
                                 seen.add(type);
-                                stack = makeStack(type, stack)
+                                stack = makeStack([depth + 1, type], stack)
                             }
                         }
                     }
@@ -987,11 +1001,17 @@ namespace ts {
          * followed by subtypes, subtypes of subtypes, etc.
          */
         function collectRelevantSymbols(target: Type) {
-            const relevant = collectRelevantSymbolsLoop(target);
-            const returnArray: Symbol[] = []
-            relevant.forEach((s) => {
-                returnArray.push(s)
+            const relevant = collectRelevantSymbolsLoop(target, 0);
+            const unsortedReturnArray: [Symbol[], number][] = []
+
+            relevant.forEach((symbols, depth) => {
+                unsortedReturnArray.push([arrayFrom(symbols.values()), depth])
             })
+
+            const returnArray = unsortedReturnArray
+                .sort(([, d0], [, d1]) => compareValues(d0, d1))
+                .flatMap(([symbols]) => symbols)
+
             // collect primitive symbols last, in case they have overridden extensions
             if (target.flags & TypeFlags.StringLike) {
                 returnArray.push(tsplusStringPrimitiveSymbol);
