@@ -2875,8 +2875,8 @@ namespace ts {
                 if (globalImport && originalLocation) {
                     if (produceDiagnostics) {
                         if (!errorLocation ||
-                            !checkAndReportErrorForUsingTsPlusTypeAsValue(errorLocation, name, meaning, globalImport) &&
-                            !checkAndReportErrorForUsingTsPlusValueAsType(errorLocation, name, meaning, globalImport)) {
+                            !checkAndReportErrorForUsingTsPlusTypeAsValue(originalLocation, errorLocation, name, meaning, globalImport) &&
+                            !checkAndReportErrorForUsingTsPlusValueAsType(originalLocation, errorLocation, name, globalImport)) {
                             getNodeLinks(originalLocation).tsPlusGlobalIdentifier = globalImport.symbol;
                             return globalImport.symbol;
                         }
@@ -3215,8 +3215,8 @@ namespace ts {
             ))
         }
 
-        function checkAndReportErrorForUsingTsPlusTypeAsValue(errorLocation: Node, name: __String, meaning: SymbolFlags, globalImport: TsPlusGlobalImport): boolean {
-            if ((meaning & (SymbolFlags.Value & ~SymbolFlags.Namespace)) && meaning !== SymbolFlags.Type) {
+        function checkAndReportErrorForUsingTsPlusTypeAsValue(node: Node, errorLocation: Node, name: __String, meaning: SymbolFlags, globalImport: TsPlusGlobalImport): boolean {
+            if (!isPartOfTypeNode(node) || !isPartOfTypeQuery(node)) {
                 const isTypeOnlyGlobal = getSymbolLinks(globalImport.symbol).isTsPlusTypeOnlyGlobal;
                 const rawName = unescapeLeadingUnderscores(name);
                 if (isTypeOnlyGlobal) {
@@ -3242,10 +3242,8 @@ namespace ts {
             return false;
         }
 
-        function checkAndReportErrorForUsingTsPlusValueAsType(errorLocation: Node, name: __String, meaning: SymbolFlags, globalImport: TsPlusGlobalImport): boolean {
-            if (meaning & (SymbolFlags.Type & ~SymbolFlags.Namespace) &&
-                meaning !== SymbolFlags.Value &&
-                meaning !== (SymbolFlags.Value | SymbolFlags.ExportValue)) {
+        function checkAndReportErrorForUsingTsPlusValueAsType(node: Node, errorLocation: Node, name: __String, globalImport: TsPlusGlobalImport): boolean {
+            if (isPartOfTypeNode(node) || isPartOfTypeQuery(node)) {
                 const rawName = unescapeLeadingUnderscores(name);
                 if (!(globalImport.targetSymbol.flags & SymbolFlags.Type)) {
                     diagnostics.add(addRelatedGlobalImportInfo(createError(errorLocation, Diagnostics._0_refers_to_a_value_but_is_being_used_as_a_type_here_Did_you_mean_typeof_0, rawName), globalImport, rawName));
