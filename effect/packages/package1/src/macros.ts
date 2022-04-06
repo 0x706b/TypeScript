@@ -1,14 +1,14 @@
 /**
  * @tsplus macro identity
  */
-function identity<A>(a: A): A {
+export function identity<A>(a: A): A {
   return a
 }
 
 /**
  * @tsplus macro remove
  */
-function concrete(u: unknown): asserts u is any {
+export function concrete(u: unknown): asserts u is any {
   //
 }
 
