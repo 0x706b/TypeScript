@@ -1484,9 +1484,9 @@ namespace ts {
             if (!isCallExpression(node)) {
                 return false;
             }
-            const type = getTypeOfNode(node.expression);
-            if (type && type.symbol && type.symbol.declarations) {
-                for (const declaration of type.symbol.declarations) {
+            const links = getNodeLinks(node.expression);
+            if (links.resolvedSymbol && links.resolvedSymbol.declarations) {
+                for (const declaration of links.resolvedSymbol.declarations) {
                     if (getAllJSDocTags(declaration, (_): _ is JSDocTag => _.tagName.escapedText === "tsplus" && _.comment === `macro ${macro}`).length > 0) {
                         return true;
                     }
