@@ -31061,11 +31061,11 @@ namespace ts {
             }
 
             // TSPLUS EXTENTION BEGIN
-            // Only derive parameters once all type parameters are inferred
-            if (!(checkMode & CheckMode.SkipGenericFunctions)) {
-                for (let i = argCount; i < signature.parameters.length; i++) {
-                    const param = signature.parameters[i]
-                    if (param.valueDeclaration && (param.valueDeclaration as ParameterDeclaration).isAuto) {
+            for (let i = argCount; i < signature.parameters.length; i++) {
+                const param = signature.parameters[i]
+                if (param.valueDeclaration && (param.valueDeclaration as ParameterDeclaration).isAuto) {
+                    // Only derive parameters once all type parameters are inferred
+                    if (context.inferences.length === 0 || findIndex(context.inferences, (info) => info.candidates === undefined) === -1) {
                         const paramType = getTypeAtPosition(getSignatureInstantiation(signature, getInferredTypes(context), /* isJavascript */false), i);
                         deriveParameter(node, paramType, i);
                     }
