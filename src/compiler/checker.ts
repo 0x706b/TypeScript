@@ -872,7 +872,20 @@ namespace ts {
                 if (doCall) {
                     checker.getTypeAtLocation(doCall);
                 }
-            }
+            },
+            getTsPlusSymbolAtLocation: (node) => {
+                const type = checker.getTypeAtLocation(node);
+                if (isTsPlusType(type)) {
+                    return type.symbol ?? type.aliasSymbol;
+                }
+                if (type.symbol && isTsPlusSymbol(type.symbol)) {
+                    return type.symbol;
+                }
+                if (type.aliasSymbol && isTsPlusSymbol(type.aliasSymbol)) {
+                    return type.aliasSymbol;
+                }
+                return undefined;
+            },
             // TSPLUS EXTENSION END
         };
 

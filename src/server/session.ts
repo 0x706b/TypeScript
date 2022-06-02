@@ -1765,15 +1765,19 @@ namespace ts.server {
                 !!args.findInComments,
                 this.getPreferences(file)
             );
+            if (renameInfo.extraLocation) {
+                // @ts-expect-error
+                locations.push(renameInfo.extraLocation);
+            }
             if (!simplifiedResult) return locations;
             return { info: renameInfo, locs: this.toSpanGroups(locations) };
         }
 
         private mapRenameInfo(info: RenameInfo, scriptInfo: ScriptInfo): protocol.RenameInfo {
             if (info.canRename) {
-                const { canRename, fileToRename, displayName, fullDisplayName, kind, kindModifiers, triggerSpan } = info;
+                const { canRename, fileToRename, displayName, fullDisplayName, kind, kindModifiers, triggerSpan, extraLocation } = info;
                 return identity<protocol.RenameInfoSuccess>(
-                    { canRename, fileToRename, displayName, fullDisplayName, kind, kindModifiers, triggerSpan: toProtocolTextSpan(triggerSpan, scriptInfo) });
+                    { canRename, fileToRename, displayName, fullDisplayName, kind, kindModifiers, triggerSpan: toProtocolTextSpan(triggerSpan, scriptInfo), extraLocation });
             }
             else {
                 return info;

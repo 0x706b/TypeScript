@@ -1295,6 +1295,8 @@ namespace ts.server.protocol {
 
         /** Span of text to rename. */
         triggerSpan: TextSpan;
+
+        extraLocation?: RenameLocation;
     }
     export interface RenameInfoFailure {
         canRename: false;

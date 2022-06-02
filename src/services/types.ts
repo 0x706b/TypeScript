@@ -1129,6 +1129,7 @@ namespace ts {
         kind: ScriptElementKind;
         kindModifiers: string;
         triggerSpan: TextSpan;
+        extraLocation?: RenameLocation;
     }
     export interface RenameInfoFailure {
         canRename: false;

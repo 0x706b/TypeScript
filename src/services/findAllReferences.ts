@@ -669,7 +669,7 @@ namespace ts.FindAllReferences {
 
             const checker = program.getTypeChecker();
             // constructors should use the class symbol, detected by name, if present
-            const symbol = checker.getSymbolAtLocation(isConstructorDeclaration(node) && node.parent.name || node);
+            let symbol = checker.getSymbolAtLocation(isConstructorDeclaration(node) && node.parent.name || node);
 
             // Could not find a symbol e.g. unknown identifier
             if (!symbol) {
@@ -688,7 +688,12 @@ namespace ts.FindAllReferences {
                     }
                     return getReferencesForStringLiteral(node, sourceFiles, checker, cancellationToken);
                 }
-                return undefined;
+                // TSPLUS EXTENSION BEGIN
+                symbol = checker.getTsPlusSymbolAtLocation(node);
+                if (!symbol) {
+                // TSPLUS EXTENSION END
+                    return undefined
+                }
             }
 
             if (symbol.escapedName === InternalSymbolName.ExportEquals) {
@@ -1562,6 +1567,11 @@ namespace ts.FindAllReferences {
             if (!hasMatchingMeaning(referenceLocation, state)) return;
 
             let referenceSymbol = state.checker.getSymbolAtLocation(referenceLocation);
+            // TSPLUS EXTENSION START
+            if (!referenceSymbol) {
+                referenceSymbol = state.checker.getTsPlusSymbolAtLocation(referenceLocation);
+            }
+            // TSPLUS EXTENSION END
             if (!referenceSymbol) {
                 return;
             }

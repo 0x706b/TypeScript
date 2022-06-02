@@ -12,7 +12,7 @@ namespace ts.Rename {
     }
 
     function getRenameInfoForNode(node: Node, typeChecker: TypeChecker, sourceFile: SourceFile, program: Program, options?: RenameInfoOptions): RenameInfo | undefined {
-        const symbol = typeChecker.getSymbolAtLocation(node);
+        let symbol = typeChecker.getSymbolAtLocation(node);
         if (!symbol) {
             if (isStringLiteralLike(node)) {
                 const type = getContextualTypeFromParentOrAncestorTypeNode(node, typeChecker);
@@ -26,11 +26,51 @@ namespace ts.Rename {
                 const name = getTextOfNode(node);
                 return getRenameInfoSuccess(name, name, ScriptElementKind.label, ScriptElementKindModifier.none, node, sourceFile);
             }
-            return undefined;
+            // TSPLUS EXTENSION BEGIN
+            symbol = typeChecker.getTsPlusSymbolAtLocation(node);
+            if (!symbol) {
+            // TSPLUS EXTENSION END
+                return undefined;
+            }
         }
         // Only allow a symbol to be renamed if it actually has at least one declaration.
-        const { declarations } = symbol;
-        if (!declarations || declarations.length === 0) return;
+        let declarations = symbol.declarations;
+        let extraLocation: RenameLocation | undefined;
+        if (!declarations || declarations.length === 0) {
+            if (isTsPlusSymbol(symbol)) {
+                const tsPlusSymbol = symbol;
+                const nodeText = getTextOfNode(node);
+                switch (tsPlusSymbol.tsPlusTag) {
+                    case TsPlusSymbolTag.StaticFunction: {
+                        declarations = [tsPlusSymbol.tsPlusDeclaration]
+                        const tag = getAllJSDocTags(
+                            tsPlusSymbol.tsPlusDeclaration,
+                            (tag): tag is TsPlusJSDocStaticTag => tag.tagName.escapedText === 'tsplus' as __String &&
+                                typeof tag.comment === 'string' &&
+                                tag.comment.indexOf('static') !== -1 &&
+                                tag.comment.indexOf(nodeText) !== -1
+                        )[0]
+                        if (tag) {
+                            const [_, typeName, name] = tag.comment.split(" ");
+                            const pos = tag.tagName.end + 1 + _.length + 1 + typeName.length + 1;
+                            const len = name.length;
+                            extraLocation = {
+                                fileName: getSourceFileOfNode(tsPlusSymbol.tsPlusDeclaration).fileName,
+                                textSpan: createTextSpan(pos, len)
+                            }
+                        }
+                        break;
+                    }
+                    default: {
+                        declarations = []
+                        break;
+                    }
+                }
+            }
+            if (!declarations || declarations.length === 0) {
+                return;
+            }
+        }
 
         // Disallow rename for elements that are defined in the standard TypeScript library.
         if (declarations.some(declaration => isDefinedInLibraryFile(program, declaration))) {
@@ -52,7 +92,7 @@ namespace ts.Rename {
             : undefined;
         const displayName = specifierName || typeChecker.symbolToString(symbol);
         const fullDisplayName = specifierName || typeChecker.getFullyQualifiedName(symbol);
-        return getRenameInfoSuccess(displayName, fullDisplayName, kind, SymbolDisplay.getSymbolModifiers(typeChecker,symbol), node, sourceFile);
+        return getRenameInfoSuccess(displayName, fullDisplayName, kind, SymbolDisplay.getSymbolModifiers(typeChecker,symbol), node, sourceFile, extraLocation);
     }
 
     function isDefinedInLibraryFile(program: Program, declaration: Node) {
@@ -84,7 +124,7 @@ namespace ts.Rename {
         };
     }
 
-    function getRenameInfoSuccess(displayName: string, fullDisplayName: string, kind: ScriptElementKind, kindModifiers: string, node: Node, sourceFile: SourceFile): RenameInfoSuccess {
+    function getRenameInfoSuccess(displayName: string, fullDisplayName: string, kind: ScriptElementKind, kindModifiers: string, node: Node, sourceFile: SourceFile, extraLocation?: RenameLocation): RenameInfoSuccess {
         return {
             canRename: true,
             fileToRename: undefined,
@@ -92,7 +132,8 @@ namespace ts.Rename {
             displayName,
             fullDisplayName,
             kindModifiers,
-            triggerSpan: createTriggerSpanForNode(node, sourceFile)
+            triggerSpan: createTriggerSpanForNode(node, sourceFile),
+            extraLocation
         };
     }
 

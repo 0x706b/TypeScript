@@ -4783,6 +4783,7 @@ namespace ts {
         getTsPlusGlobals(): Symbol[];
         getTsPlusGlobal(name: string): TsPlusGlobalImport | undefined;
         findAndCheckDoAncestor(node: Node): void;
+        getTsPlusSymbolAtLocation(node: Node): Symbol | undefined;
     }
 
     /* @internal */
