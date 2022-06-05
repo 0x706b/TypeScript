@@ -33436,7 +33436,7 @@ namespace ts {
                             (isParameterDeclaration(local.valueDeclaration as VariableLikeDeclaration) || isLocalImplicit(local.valueDeclaration)) &&
                             isNamedDeclaration(local.valueDeclaration) &&
                             isIdentifier(local.valueDeclaration.name) && 
-                            isBlockScopedNameDeclaredBeforeUse(local.valueDeclaration, location)
+                            isBlockScopedNameDeclaredBeforeUse(local.valueDeclaration.name, location)
                             ) {
                                 const { tagSet: implicitTags, type: implicitType } = getTypeAndImplicitTags(local);
                                 for (const tag of tags) {
