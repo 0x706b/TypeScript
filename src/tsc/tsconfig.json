@@ -8,6 +8,7 @@
     ],
     "references": [
         { "path": "../compiler", "prepend": true },
+        { "path": "../services", "prepend": true },
         { "path": "../executeCommandLine", "prepend": true }
     ]
 }
