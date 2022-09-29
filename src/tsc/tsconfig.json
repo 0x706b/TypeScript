@@ -1,5 +1,5 @@
 {
-    "extends": "../tsconfig-noncomposite-base",
+    "extends": "../tsconfig-library-base",
     "compilerOptions": {
         "outFile": "../../built/local/tsc.js"
     },
@@ -8,7 +8,6 @@
     ],
     "references": [
         { "path": "../compiler", "prepend": true },
-        { "path": "../services", "prepend": true },
         { "path": "../jsTyping", "prepend": true },
         { "path": "../services", "prepend": true },
         { "path": "../deprecatedCompat", "prepend": true },
