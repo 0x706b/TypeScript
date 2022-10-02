@@ -2776,6 +2776,7 @@ declare namespace ts.server.protocol {
         /** Paths used to used to compute primary types search locations */
         typeRoots?: string[];
         [option: string]: CompilerOptionsValue | undefined;
+        transformers?: TransformerImport[];
     }
     const enum JsxEmit {
         None = "None",
@@ -2924,6 +2925,8 @@ declare namespace ts.server.protocol {
          * interface Y { foo:number; }
          */
         memberVariableElement = "property",
+        /** class X { [public|private]* accessor foo: number; } */
+        memberAccessorVariableElement = "accessor",
         /**
          * class X { constructor() { } }
          * class X { static { } }
@@ -2973,7 +2976,7 @@ declare namespace ts.server.protocol {
         [option: string]: CompilerOptionsValue | undefined;
     }
 
-    export type CompilerOptionsValue = string | number | boolean | (string | number)[] | string[] | MapLike<string[]> | PluginImport[] | ProjectReference[] | null | undefined;
+    export type CompilerOptionsValue = string | number | boolean | (string | number)[] | string[] | MapLike<string[]> | PluginImport[] | ProjectReference[] | TransformerImport[] | null | undefined;
 
     export interface FileExtensionInfo {
         extension: string;
@@ -3003,6 +3006,11 @@ declare namespace ts.server.protocol {
         prepend?: boolean;
         /** True if it is intended that this reference form a circularity */
         circular?: boolean;
+    }
+
+    export interface TransformerImport {
+        name: string;
+        position?: "before" | "after" | "afterDeclaration";
     }
 }
 declare namespace ts {
