@@ -7170,8 +7170,9 @@ namespace ts {
 
         [option: string]: CompilerOptionsValue | TsConfigSourceFile | undefined;
 
-        tsPlusConfig?: string
-        tsPlusEnabled?: boolean
+        tsPlusConfig?: string;
+        tsPlusTypes?: string[];
+        tsPlusEnabled?: boolean;
         transformers?: TransformerImport[];
     }
 

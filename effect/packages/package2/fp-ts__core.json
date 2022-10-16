@@ -1,0 +1,31 @@
+{
+  "@fp-ts/core/Async": [
+    {
+      "definition": "Async",
+      "type": "interface",
+      "extension": "type",
+      "typeName": "fp-ts/Async"
+    },
+    {
+      "definition": "fromSync",
+      "type": "const",
+      "extension": "static",
+      "typeName": "fp-ts/Async",
+      "name": "static"
+    },
+    {
+      "definition": "delay",
+      "type": "const",
+      "extension": "pipeable",
+      "typeName": "fp-ts/Async",
+      "name": "delay"
+    },
+    {
+      "definition": "map",
+      "type": "const",
+      "extension": "pipeable",
+      "typeName": "fp-ts/Async",
+      "name": "map"
+    }
+  ]
+}
