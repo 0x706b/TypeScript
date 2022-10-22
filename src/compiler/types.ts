@@ -3334,6 +3334,7 @@ namespace ts {
         readonly tsPlusTypeTags?: string[];
         readonly tsPlusDeriveTags?: string[];
         readonly tsPlusNoInheritTags?: string[];
+        readonly tsPlusCompanionTags?: string[];
         // TSPLUS END
     }
 
@@ -3356,6 +3357,7 @@ namespace ts {
 
         // TSPLUS BEGIN
         readonly tsPlusTypeTags?: string[];
+        readonly tsPlusCompanionTags?: string[];
         readonly tsPlusNoInheritTags?: string[];
         // TSPLUS END
     }
@@ -4427,7 +4429,7 @@ namespace ts {
         tsPlusGlobalImports?: ImportDeclaration[];
         tsPlusContext: {
             type: (InterfaceDeclaration | TypeAliasDeclaration | ClassDeclaration)[];
-            companion: ClassDeclaration[];
+            companion: (InterfaceDeclaration | TypeAliasDeclaration | ClassDeclaration)[];
             fluent: (VariableDeclarationWithIdentifier | FunctionDeclaration)[];
             pipeable: (VariableDeclarationWithIdentifier | FunctionDeclaration)[];
             operator: (VariableDeclarationWithIdentifier | FunctionDeclaration)[];

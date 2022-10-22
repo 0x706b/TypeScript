@@ -1521,7 +1521,7 @@ namespace ts {
                     if (statement.tsPlusNoInheritTags && statement.tsPlusNoInheritTags.length > 0) {
                         file.tsPlusContext.noInherit.push(statement);
                     }
-                    if (isClassDeclaration(statement) && statement.tsPlusCompanionTags && statement.tsPlusCompanionTags.length > 0) {
+                    if (statement.tsPlusCompanionTags && statement.tsPlusCompanionTags.length > 0) {
                         file.tsPlusContext.companion.push(statement);
                     }
                     if (isClassDeclaration(statement) && statement.name && statement.tsPlusStaticTags && statement.tsPlusStaticTags.length > 0) {
@@ -8055,6 +8055,7 @@ namespace ts {
             addTsPlusTagsFromExternalTypes(finished);
             if (finished.jsDoc) {
                 const typeTags: string[] = [];
+                const companionTags: string[] = [];
                 const deriveTags: string[] = [];
                 const noInheritTags: string[] = [];
                 for (const doc of finished.jsDoc) {
@@ -8069,6 +8070,14 @@ namespace ts {
                                             break;
                                         }
                                         typeTags.push(target);
+                                        break;
+                                    }
+                                    case "companion": {
+                                        if (!target) {
+                                            parseErrorAt(tag.pos, tag.end - 1, Diagnostics.Annotation_of_a_companion_extension_must_have_the_form_tsplus_companion_typename);
+                                            break;
+                                        }
+                                        companionTags.push(target);
                                         break;
                                     }
                                     case "derive": {
@@ -8093,6 +8102,7 @@ namespace ts {
                     }
                 }
                 (finished as Mutable<InterfaceDeclaration>).tsPlusTypeTags = undefinedIfZeroLength(typeTags);
+                (finished as Mutable<InterfaceDeclaration>).tsPlusCompanionTags = undefinedIfZeroLength(companionTags);
                 (finished as Mutable<InterfaceDeclaration>).tsPlusDeriveTags = undefinedIfZeroLength(deriveTags);
                 (finished as Mutable<InterfaceDeclaration>).tsPlusNoInheritTags = undefinedIfZeroLength(noInheritTags);
             }
@@ -8112,6 +8122,7 @@ namespace ts {
             addTsPlusTagsFromExternalTypes(finished);
             if (finished.jsDoc) {
                 const typeTags: string[] = [];
+                const companionTags: string[] = [];
                 const noInheritTags: string[] = [];
                 for (const doc of finished.jsDoc) {
                     if (doc.tags) {
@@ -8125,6 +8136,14 @@ namespace ts {
                                             break;
                                         }
                                         typeTags.push(target);
+                                        break;
+                                    }
+                                    case "companion": {
+                                        if (!target) {
+                                            parseErrorAt(tag.pos, tag.end - 1, Diagnostics.Annotation_of_a_companion_extension_must_have_the_form_tsplus_companion_typename);
+                                            break;
+                                        }
+                                        companionTags.push(target);
                                         break;
                                     }
                                     case "no-inherit": {
@@ -8141,6 +8160,7 @@ namespace ts {
                     }
                 }
                 (finished as Mutable<TypeAliasDeclaration>).tsPlusTypeTags = undefinedIfZeroLength(typeTags);
+                (finished as Mutable<TypeAliasDeclaration>).tsPlusCompanionTags = undefinedIfZeroLength(companionTags);
                 (finished as Mutable<TypeAliasDeclaration>).tsPlusNoInheritTags = undefinedIfZeroLength(noInheritTags);
             }
             return finished;
