@@ -32914,37 +32914,32 @@ namespace ts {
 
             // TSPLUS EXTENSION START
             if (callSignatures.length === 0) {
+                let callExtension: TsPlusStaticFunctionExtension | undefined
                 if (isCompanionReference(node.expression)) {
-                    const callExtension = getStaticCompanionExtension(apparentType, "__call");
-
-                    if (callExtension) {
-                        callSignatures = Array.from(getSignaturesOfType(getTypeOfSymbol(callExtension.patched), SignatureKind.Call));
-                        callCache.set(node.expression, callExtension);
-                        getNodeLinks(node).tsPlusCallExtension = callExtension;
-                    }
+                    callExtension = getStaticCompanionExtension(apparentType, "__call");
+                }
+                if (!callExtension) {
+                    callExtension = getStaticExtension(apparentType, "__call");
+                }
+                if (callExtension) {
+                    callSignatures = Array.from(getSignaturesOfType(getTypeOfSymbol(callExtension.patched), SignatureKind.Call));
+                    callCache.set(node.expression, callExtension);
+                    getNodeLinks(node).tsPlusCallExtension = callExtension;
                 }
                 else {
-                    const callExtension = getStaticExtension(apparentType, "__call");
-                    
-                    if (callExtension) {
-                        callSignatures = Array.from(getSignaturesOfType(getTypeOfSymbol(callExtension.patched), SignatureKind.Call));
-                        callCache.set(node.expression, callExtension);
-                        getNodeLinks(node).tsPlusCallExtension = callExtension;
-                    } else {
-                        const callFluentExtensions = getFluentExtension(apparentType, "__call");
-                        if (callFluentExtensions) {
-                            callSignatures = Array.from(getSignaturesOfType(callFluentExtensions, SignatureKind.Call).map((s) => {
-                                const sig = createTsPlusSignature(
-                                    (s as TsPlusSignature).tsPlusOriginal,
-                                    (s as TsPlusSignature).tsPlusExportName,
-                                    (s as TsPlusSignature).tsPlusFile
-                                );
-                                sig.tsPlusDeclaration = (s as TsPlusSignature).tsPlusDeclaration;
-                                sig.tsPlusPipeable = (s as TsPlusSignature).tsPlusPipeable;
-                                return sig;
-                            }));
-                            getNodeLinks(node).isFluentCall = true;
-                        }
+                    const callFluentExtensions = getFluentExtension(apparentType, "__call");
+                    if (callFluentExtensions) {
+                        callSignatures = Array.from(getSignaturesOfType(callFluentExtensions, SignatureKind.Call).map((s) => {
+                            const sig = createTsPlusSignature(
+                                (s as TsPlusSignature).tsPlusOriginal,
+                                (s as TsPlusSignature).tsPlusExportName,
+                                (s as TsPlusSignature).tsPlusFile
+                            );
+                            sig.tsPlusDeclaration = (s as TsPlusSignature).tsPlusDeclaration;
+                            sig.tsPlusPipeable = (s as TsPlusSignature).tsPlusPipeable;
+                            return sig;
+                        }));
+                        getNodeLinks(node).isFluentCall = true;
                     }
                 }
             }

@@ -4,10 +4,17 @@
  */
 export type A = {}
 
-
 /**
  * @tsplus static companions-everywhere/AOps get
  */
 export const get: A = {}
 
-A.get
+/**
+ * @tsplus static companions-everywhere/AOps __call
+ */
+export const callA = (): A => ({})
+
+class X {}
+
+new X()
+X
