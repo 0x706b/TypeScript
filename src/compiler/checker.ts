@@ -826,7 +826,7 @@ namespace ts {
             getIndexAccessExpressionCache: () => indexAccessExpressionCache,
             isTsPlusMacroCall,
             isTsPlusMacroGetter,
-            isClassCompanionReference,
+            isCompanionReference,
             collectTsPlusFluentTags,
             hasExportedPlusTags: (declaration) => {
                 return collectTsPlusFluentTags(declaration).length > 0 ||
@@ -1196,7 +1196,7 @@ namespace ts {
             const copy: ESMap<string, Symbol> = new Map();
             const copyFluent: ESMap<string, Set<TsPlusFluentExtension>> = new Map();
             symbols.forEach((target) => {
-                if (typeSymbolCache.has(target) && !isClassCompanionReference(selfNode)) {
+                if (typeSymbolCache.has(target) && !isCompanionReference(selfNode)) {
                     typeSymbolCache.get(target)!.forEach((typeSymbol) => {
                         const _static = staticCache.get(typeSymbol);
                         if (_static) {
@@ -1238,7 +1238,7 @@ namespace ts {
                         }
                     });
                 }
-                if (companionSymbolCache.has(target) && isClassCompanionReference(selfNode)) {
+                if (companionSymbolCache.has(target) && isCompanionReference(selfNode)) {
                     companionSymbolCache.get(target)!.forEach((typeSymbol) => {
                         const _static = staticCache.get(typeSymbol);
                         if (_static) {
@@ -5822,7 +5822,7 @@ namespace ts {
         }
 
         // TSPLUS EXTENSION START
-        function isClassCompanionReference(node: Expression | QualifiedName): boolean {
+        function isCompanionReference(node: Expression | QualifiedName): boolean {
             let type: Type | undefined
 
             const symbol = getSymbolAtLocation(node);
@@ -5836,7 +5836,8 @@ namespace ts {
             if (!type) {
                 return false
             }
-            return !!(getObjectFlags(type) & ObjectFlags.Anonymous && type.symbol && type.symbol.flags & SymbolFlags.Class) || symbol === type.symbol || symbol === type.aliasSymbol;
+            return !!(getObjectFlags(type) & ObjectFlags.Anonymous && type.symbol && type.symbol.flags & SymbolFlags.Class)
+                || (!!symbol?.declarations?.[0] && (isInterfaceDeclaration(symbol.declarations[0]) || isTypeAliasDeclaration(symbol.declarations[0])))
         }
         // TSPLUS EXTENSION END
 
@@ -30638,7 +30639,7 @@ namespace ts {
                 if (nodeLinks.tsPlusResolvedType) {
                     return nodeLinks.tsPlusResolvedType;
                 }
-                if (isClassCompanionReference(_left)) {
+                if (isCompanionReference(_left)) {
                     const companionExt = getStaticCompanionExtension(leftType, right.escapedText.toString());
                     if (companionExt) {
                         nodeLinks.tsPlusStaticExtension = companionExt;
@@ -32913,7 +32914,7 @@ namespace ts {
 
             // TSPLUS EXTENSION START
             if (callSignatures.length === 0) {
-                if (isClassCompanionReference(node.expression)) {
+                if (isCompanionReference(node.expression)) {
                     const callExtension = getStaticCompanionExtension(apparentType, "__call");
 
                     if (callExtension) {

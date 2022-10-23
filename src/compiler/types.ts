@@ -5235,7 +5235,7 @@ namespace ts {
         getIndexAccessExpressionCache(): ESMap<Node, { signature: Signature, declaration: FunctionDeclaration | VariableDeclarationWithIdentifier, definition: SourceFile, exportName: string }>
         isTsPlusMacroCall<K extends string>(node: Node, macro: K): node is TsPlusMacroCallExpression<K>
         isTsPlusMacroGetter(node: Node, macro: string): boolean
-        isClassCompanionReference(node: Expression): boolean
+        isCompanionReference(node: Expression): boolean
         collectTsPlusFluentTags(statement: Declaration): readonly TsPlusPrioritizedExtensionTag[]
         hasExportedPlusTags(statement: Declaration): boolean;
         getFluentExtensionForPipeableSymbol(symbol: TsPlusPipeableIdentifierSymbol): TsPlusFluentExtension | undefined
