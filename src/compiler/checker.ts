@@ -2800,6 +2800,7 @@ namespace ts {
                                     const originalSymbol = getTargetOfImportSpecifier(symbol.declarations[0], false);
                                     if (originalSymbol && companionSymbolCache.has(originalSymbol)) {
                                         result = originalSymbol;
+                                        symbol.isReferenced = SymbolFlags.Value;
                                         break loop;
                                     }
                                 }
@@ -40569,6 +40570,9 @@ namespace ts {
 
                         if (isImportedDeclaration(declaration) && getNodeLinks(declaration)) {
                             const importClause = importClauseFromImported(declaration);
+                            // const target = getTargetOfImportSpecifier(declaration);
+                            // // if (target && isTsPlusSymbol(target) && )
+                            // if (getTargetOfImportSpecifier(declaration))
                             if (!importClause.parent.isTsPlusGlobal) {
                                 addToGroup(unusedImports, importClause, declaration, getNodeId);
                             }
@@ -40604,6 +40608,9 @@ namespace ts {
                 }
             });
             unusedImports.forEach(([importClause, unuseds]) => {
+                if (importClause.namedBindings && isNamedImportBindings(importClause.namedBindings)) {
+
+                }
                 const importDecl = importClause.parent;
                 const nDeclarations = (importClause.name ? 1 : 0) +
                     (importClause.namedBindings ?

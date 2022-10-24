@@ -1426,6 +1426,31 @@ namespace ts {
                 }
 
                 if (!resolvedPath) {
+                    if (fileName.includes("fp-ts/core/Async.d.ts")) {
+                        debugger;
+                    }
+                    let packageName = removeExtension(fileName.split("node_modules").slice(-1)[0].substring(1), ".d.ts");
+                    if (!packageName) {
+                        return;
+                    }
+                    if (packageName.startsWith("@")) {
+                        packageName = packageName.split(directorySeparator).slice(0, 2).join(directorySeparator);
+                    } else {
+                        packageName = fileName.split(directorySeparator).slice(0, 1)[0];
+                    }
+                    const resolvedPackageJson = resolvePackageNameToPackageJson(packageName, options.configFilePath, options, sys, undefined)
+                    if (resolvedPackageJson) {
+                        const packageJsonText = sys.readFile(resolvePath(resolvedPackageJson.packageDirectory, 'package.json'));
+                        if (packageJsonText) {
+                            const packageJson = JSON.parse(packageJsonText);
+                            if (packageJson["tsPlusTypes"]) {
+                                resolvedPath = resolvePath(resolvedPackageJson.packageDirectory, packageJson["tsPlusTypes"]);
+                            }
+                        }
+                    }
+                }
+
+                if (!resolvedPath) {
                     let packageName = removeExtension(fileName.split("node_modules").slice(-1)[0].substring(1), ".d.ts");
                     if (!packageName) {
                         return;

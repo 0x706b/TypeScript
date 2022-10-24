@@ -1,31 +1,51 @@
 {
   "@fp-ts/core/Async": [
     {
-      "definition": "Async",
-      "type": "interface",
-      "extension": "type",
-      "typeName": "fp-ts/Async"
+      "definitionName": "Async",
+      "definitionKind": "interface",
+      "extensions": [
+        {
+          "kind": "type",
+          "typeName": "fp-ts/Async"
+        },
+        {
+          "kind": "companion",
+          "typeName": "fp-ts/AsyncOps"
+        }
+      ]
     },
     {
-      "definition": "fromSync",
-      "type": "const",
-      "extension": "static",
-      "typeName": "fp-ts/Async",
-      "name": "static"
+      "definitionName": "fromSync",
+      "definitionKind": "const",
+      "extensions": [
+        {
+          "kind": "static",
+          "typeName": "fp-ts/AsyncOps",
+          "name": "fromSync"
+        }
+      ]
     },
     {
-      "definition": "delay",
-      "type": "const",
-      "extension": "pipeable",
-      "typeName": "fp-ts/Async",
-      "name": "delay"
+      "definitionName": "delay",
+      "definitionKind": "const",
+      "extensions": [
+        {
+          "kind": "pipeable",
+          "typeName": "fp-ts/Async",
+          "name": "delay"
+        }
+      ]
     },
     {
-      "definition": "map",
-      "type": "const",
-      "extension": "pipeable",
-      "typeName": "fp-ts/Async",
-      "name": "map"
+      "definitionName": "map",
+      "definitionKind": "const",
+      "extensions": [
+        {
+          "kind": "pipeable",
+          "typeName": "fp-ts/Async",
+          "name": "map"
+        }
+      ]
     }
   ]
 }

@@ -1,3 +1,4 @@
-import * as T from '@fp-ts/core/Async'
+import { Async } from '@fp-ts/core/Async'
 
-T.fromSync(() => "").delay(1)
+Async.fromSync(() => console.log("Fluent in fp-ts!")).delay(1)
+

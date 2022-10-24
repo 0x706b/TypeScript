@@ -3826,6 +3826,7 @@ namespace ts {
         PipeableDeclaration = "TsPlusPipeableDeclarationSymbol"
     }
 
+
     export interface TsPlusPipeableDeclarationSymbol extends TransientSymbol {
         tsPlusTag: TsPlusSymbolTag.PipeableDeclaration
         tsPlusDeclaration: FunctionDeclaration | VariableDeclarationWithFunction | VariableDeclarationWithFunctionType;
