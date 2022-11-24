@@ -4140,6 +4140,9 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                     );
                     if (!withoutGlobals) {
                         getNodeLinks(originalLocation).isTsPlusGlobalIdentifier = true;
+                        if (companionSymbolCache.has(targetSymbol)) {
+                            getSymbolLinks(targetSymbol).isPossibleCompanionReference = true;
+                        }
                         result = targetSymbol;
                     }
                 }
@@ -31768,6 +31771,9 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
 
     // TSPLUS EXTENSION START
     function checkPropertyAccessForExtension(node: PropertyAccessExpression | QualifiedName, _left: Expression | QualifiedName, leftType: Type, right: Identifier | PrivateIdentifier, _checkMode: CheckMode | undefined) {
+        if (getSourceFileOfNode(node).fileName.includes("type-companion-global")) {
+            debugger;
+        }
         const inType = getPropertiesOfType(leftType).findIndex((p) => p.escapedName === right.escapedText) !== -1;
         if (!inType) {
             const nodeLinks = getNodeLinks(node);
