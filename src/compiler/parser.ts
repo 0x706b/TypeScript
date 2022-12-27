@@ -1584,6 +1584,9 @@ namespace Parser {
     // attached to the EOF token.
     let parseErrorBeforeNextFinishedNode = false;
     
+    const tsPlusExternalTypeCache = new Map<string, Record<string, TsPlusTypeDefinition[]>>()
+    const tsPlusResolvedPathsCache = new Map<string, string[]>()
+    const tsPlusResolvedModuleCache = new Map<string, any>()
     let currentTsPlusTypes: TsPlusTypeDefinition[] | null = null;
     let currentTsPlusFile: string | null = null;
 
@@ -1823,8 +1826,12 @@ namespace Parser {
         }
     }
 
-    function parseTsPlusExternalTypes(fileName: string, options: CompilerOptions) {
+    function getTsPlusExternalTypesPaths(fileName: string, options: CompilerOptions) {
         if (options.configFilePath) {
+            if (tsPlusResolvedPathsCache.has(options.configFilePath)) {
+                return tsPlusResolvedPathsCache.get(options.configFilePath)!;
+            }
+
             let resolvedPaths: string[] = [];
             if (options.tsPlusTypes) {
                 for (const path of options.tsPlusTypes) {
@@ -1832,7 +1839,7 @@ namespace Parser {
                         resolvedPaths.push(resolvePath(options.configFilePath.split("/").slice(0, -1).join('/'), path));
                     }
                     else {
-                        const { resolvedModule } = resolveModuleName(path, options.configFilePath, options, sys);
+                        const resolvedModule = resolveModuleName(path, options.configFilePath, options, sys).resolvedModule ?? resolveModuleName(path, fileName, options, sys).resolvedModule;
                         if (resolvedModule) {
                             resolvedPaths.push(resolvedModule.resolvedFileName);
                             break
@@ -1874,22 +1881,37 @@ namespace Parser {
                 }
             }
 
-            if (resolvedPaths.length === 0) {
-                return;
-            }
+            tsPlusResolvedPathsCache.set(options.configFilePath, resolvedPaths);
+            return resolvedPaths;
+        }
+        return [];
+    }
 
-            for (const resolvedPath of resolvedPaths) {
+    function parseTsPlusExternalTypes(fileName: string, options: CompilerOptions) {
+        const resolvedPaths = getTsPlusExternalTypesPaths(fileName, options);
+        if (!resolvedPaths || resolvedPaths.length === 0) {
+            return
+        }
+        for (const resolvedPath of resolvedPaths) {
+            let json = tsPlusExternalTypeCache.get(resolvedPath);
+            if (!json) {
                 const text = sys.readFile(resolvedPath);
                 if (text) {
-                    const json = JSON.parse(text);
-                    for (const moduleName in json) {
-                        const { resolvedModule } = resolveModuleName(moduleName, resolvedPath, options, sys);
-                        if (resolvedModule && resolvedModule.resolvedFileName === fileName) {
-                            currentTsPlusTypes = json[moduleName];
-                            currentTsPlusFile = moduleName;
-                            return;
-                        }
-                    }
+                    json = JSON.parse(text);
+                }
+            }
+            if (!json) return;
+            for (const moduleName in json) {
+                const key = `${options.configFilePath ?? fileName}+${moduleName}`;
+                let resolvedModule = tsPlusResolvedModuleCache.get(key);
+                if (!resolvedModule) {
+                    resolvedModule = resolveModuleName(moduleName, resolvedPath, options, sys).resolvedModule ?? resolveModuleName(moduleName, fileName, options, sys).resolvedModule;
+                    tsPlusResolvedModuleCache.set(key, resolvedModule);
+                }
+                if (resolvedModule && resolvedModule.resolvedFileName === fileName) {
+                    currentTsPlusTypes = json[moduleName];
+                    currentTsPlusFile = moduleName;
+                    return;
                 }
             }
         }
@@ -1898,6 +1920,12 @@ namespace Parser {
     function addTsPlusTagsFromExternalTypes(declaration: VariableDeclaration | FunctionDeclaration | InterfaceDeclaration | ClassDeclaration | TypeAliasDeclaration, jsDocNode?: HasJSDoc): void {
         if (currentTsPlusTypes !== null) {
             if (declaration.name && declaration.name.kind === SyntaxKind.Identifier) {
+                if (!jsDocNode) {
+                    jsDocNode = declaration;
+                }
+                if (jsDocNode.jsDoc?.[0]?.tags?.find((tag) => tag.tagName.escapedText === 'tsplus')) {
+                    return;
+                }
                 const extensions = currentTsPlusTypes.filter(
                     (type) =>
                         (declaration.kind === SyntaxKind.VariableDeclaration ? (type.definitionKind === "const")
@@ -1918,9 +1946,6 @@ namespace Parser {
                     newTags.push(factory.createJSDocUnknownTag(factory.createIdentifier("tsplus"), comment));
                 }
                 newTags.push(factory.createJSDocUnknownTag(factory.createIdentifier("tsplus"), `location "${currentTsPlusFile}"`))
-                if (!jsDocNode) {
-                    jsDocNode = declaration;
-                }
                 if (jsDocNode.jsDoc && jsDocNode.jsDoc[0]) {
                     const jsDocTags = factory.createNodeArray(Array.from(jsDocNode.jsDoc[0].tags ?? []).concat(newTags))
                     // @ts-expect-error
