@@ -1945,11 +1945,14 @@ namespace Parser {
                 }
                 newTags.push(factory.createJSDocUnknownTag(factory.createIdentifier("tsplus"), `location "${currentTsPlusFile}"`))
                 if (jsDocNode.jsDoc && jsDocNode.jsDoc[0]) {
-                    const jsDocTags = factory.createNodeArray(Array.from(jsDocNode.jsDoc[0].tags ?? []).concat(newTags))
+                    const jsDocTags = Array.from(jsDocNode.jsDoc[0].tags ?? []).concat(newTags);
                     // @ts-expect-error
-                    jsDocNode.jsDoc[0].tags = jsDocTags;
-                } else {
-                    jsDocNode.jsDoc = [factory.createJSDocComment(undefined, newTags)]
+                    jsDocNode.jsDoc[0].tags = factory.createNodeArray(jsDocTags);
+                    jsDocNode.jsDocCache = jsDocTags;
+                }
+                else {
+                    jsDocNode.jsDoc = [factory.createJSDocComment(undefined, newTags)];
+                    jsDocNode.jsDocCache = newTags;
                 }
             }
         }
@@ -7822,8 +7825,6 @@ namespace Parser {
         const pipeableIndexTags: string[] = [];
         let isImplicit = false;
 
-        addTsPlusTagsFromExternalTypes(declaration)
-
         for (const doc of jsDoc ?? []) {
             if (doc.tags) {
                 for (const tag of doc.tags) {
@@ -7965,6 +7966,7 @@ namespace Parser {
         const node = factory.createFunctionDeclaration(modifiers, asteriskToken, name, typeParameters, parameters, type, body);
         (node as Mutable<FunctionDeclaration>).illegalDecorators = decorators;
         const finished = withJSDoc(finishNode(node, pos), hasJSDoc);
+        addTsPlusTagsFromExternalTypes(finished);
         addTsPlusValueTags(finished, finished.jsDoc);
         return finished;
     }

@@ -48566,8 +48566,8 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                         factory.createNodeArray([...returnFn.parameters, ...(sig.declaration?.parameters as NodeArray<ParameterDeclaration> ?? [])]),
                         returnFn.type
                     );
-                    newDecl.jsDoc = pipeable.jsDoc;
-                    newDecl.jsDocCache = pipeable.jsDocCache;
+                    newDecl.jsDoc = pipeable.parent.parent.jsDoc;
+                    newDecl.jsDocCache = pipeable.parent.parent.jsDocCache;
                     newDecl.symbol = createTsPlusPipeableDeclarationSymbol(name, pipeable);
                     newSig.declaration = newDecl;
                     newSig.tsPlusDeclaration = pipeable;
