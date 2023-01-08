@@ -48520,11 +48520,15 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                                 factory.createBlock([])
                             );
                         }
+
                         newDecl.jsDoc = pipeable.jsDoc;
                         newDecl.jsDocCache = pipeable.jsDocCache;
                         newDecl.symbol = createTsPlusPipeableDeclarationSymbol(name, pipeable);
+                        setParent(newDecl, pipeable.parent);
+
                         newSig.declaration = newDecl;
                         newSig.tsPlusDeclaration = pipeable;
+
                         if (thisify) {
                             const thisifiedSignature = thisifyTsPlusSignature(pipeable, newSig, exportName, file, reportDiagnostic);
                             if (!thisifiedSignature) {
@@ -48566,11 +48570,15 @@ export function createTypeChecker(host: TypeCheckerHost): TypeChecker {
                         factory.createNodeArray([...returnFn.parameters, ...(sig.declaration?.parameters as NodeArray<ParameterDeclaration> ?? [])]),
                         returnFn.type
                     );
+
                     newDecl.jsDoc = pipeable.parent.parent.jsDoc;
                     newDecl.jsDocCache = pipeable.parent.parent.jsDocCache;
                     newDecl.symbol = createTsPlusPipeableDeclarationSymbol(name, pipeable);
+                    setParent(newDecl, pipeable.parent);
+
                     newSig.declaration = newDecl;
                     newSig.tsPlusDeclaration = pipeable;
+
                     if (thisify) {
                         const thisifiedSignature = thisifyTsPlusSignature(pipeable, newSig, exportName, file, reportDiagnostic);
                         if (!thisifiedSignature) {
