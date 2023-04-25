@@ -2,7 +2,7 @@
     "name": "typescript",
     "author": "Microsoft Corp.",
     "homepage": "https://www.typescriptlang.org/",
-    "version": "5.1.0",
+    "version": "5.1.0-tsplus.20230425",
     "license": "Apache-2.0",
     "description": "TypeScript is a language for application scale JavaScript development",
     "keywords": [
@@ -114,5 +114,6 @@
     "volta": {
         "node": "14.21.1",
         "npm": "8.19.3"
-    }
+    },
+    "gitHead": "e4e0e709c7c15cb568f23e4f0f1ff145610044ba"
 }
